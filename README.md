@@ -1,0 +1,2 @@
+# ptracetricks
+stupid ptrace tricks
