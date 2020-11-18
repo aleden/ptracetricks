@@ -427,7 +427,7 @@ void _ptrace_pokedata(pid_t child, uintptr_t addr, unsigned long data) {
                              std::string(strerror(errno)));
 }
 
-int ChildProc(const char *fifo_path) {
+int ChildProc(void) {
   //
   // the request
   //
