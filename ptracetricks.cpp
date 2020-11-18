@@ -95,8 +95,6 @@ int main(int argc, char **argv) {
   opts::Prog          = _argv[1];
   opts::TraceSyscalls = _argv[2][0] == 'T';
 
-  return 0;
-
   pid_t child = fork();
   if (!child)
     return ptracetricks::ChildProc();
