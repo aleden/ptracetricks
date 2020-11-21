@@ -307,6 +307,9 @@ int ParentProc(pid_t child) {
               case syscalls::NR::close:
                 cout << std::dec << a1;
                 break;
+              case syscalls::NR::exit_group:
+                cout << std::dec << a1;
+                break;
               }
             } catch (...) {
             }
