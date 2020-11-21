@@ -132,6 +132,10 @@ constexpr unsigned NR_MAX = std::max<unsigned>({0u
 
                             }) +
                             1u;
+namespace NR {
+#define SYSCALL_DEFINE(nr, nm) constexpr unsigned nm = nr;
+#include "syscalls.inc.h"
+} // namespace NR
 } // namespace syscalls
 
 const char *syscall_names[syscalls::NR_MAX] = {
