@@ -2,6 +2,13 @@ CXX := clang++
 
 ARCH := arm
 
+CFLAGS := -Ofast \
+          -Wall \
+          -Wno-initializer-overrides \
+          -Wno-c99-designator \
+          -std=gnu++14 \
+          -I arch/$(ARCH)
+
 ptracetricks: ptracetricks.cpp
 	@echo CXX $@
-	$(CXX) -o $@ -std=gnu++14 -Wall -Ofast -I arch/$(ARCH) $< -static
+	$(CXX) -o $@ $(CFLAGS) $< -static
