@@ -37,9 +37,6 @@ static bool TraceSyscalls;
 
 namespace ptracetricks {
 
-static struct {
-} Child;
-
 static int ChildProc(void);
 static int ParentProc(pid_t child);
 
@@ -219,6 +216,7 @@ int ParentProc(pid_t child) {
           //
 #if defined(__x86_64__)
           auto &no = gpr.orig_rax;
+
           auto &a1 = gpr.rdi;
           auto &a2 = gpr.rsi;
           auto &a3 = gpr.rdx;
@@ -227,6 +225,7 @@ int ParentProc(pid_t child) {
           auto &a6 = gpr.r9;
 #elif defined(__i386__)
           auto &no = gpr.orig_eax;
+
           auto &a1 = gpr.ebx;
           auto &a2 = gpr.ecx;
           auto &a3 = gpr.edx;
@@ -235,14 +234,25 @@ int ParentProc(pid_t child) {
           auto &a6 = gpr.ebp;
 #elif defined(__aarch64__)
           auto &no = gpr.regs[8];
+
           auto &a1 = gpr.regs[0];
           auto &a2 = gpr.regs[1];
           auto &a3 = gpr.regs[2];
           auto &a4 = gpr.regs[3];
           auto &a5 = gpr.regs[4];
           auto &a6 = gpr.regs[5];
+#elif defined(__arm__)
+          auto &no = gpr.uregs[7];
+
+          auto &a1 = gpr.uregs[0];
+          auto &a2 = gpr.uregs[1];
+          auto &a3 = gpr.uregs[2];
+          auto &a4 = gpr.uregs[3];
+          auto &a5 = gpr.uregs[4];
+          auto &a6 = gpr.uregs[5];
 #elif defined(__mips64) || defined(__mips__)
           auto &no = gpr.regs[2];
+
           auto &a1 = gpr.regs[4];
           auto &a2 = gpr.regs[5];
           auto &a3 = gpr.regs[6];
@@ -250,9 +260,15 @@ int ParentProc(pid_t child) {
           auto &a5 = gpr.regs[8];
           auto &a6 = gpr.regs[9];
 #else
-          // TODO XXX
-          //#error
+#error
 #endif
+          cout << "sys_" << std::dec << no << '('
+            << a1 << ", "
+            << a2 << ", "
+            << a3 << ", "
+            << a4 << ", "
+            << a5 << ", "
+            << a6 << ')' << endl;
         } else if (stopsig == SIGTRAP) {
           const unsigned int event = (unsigned int)status >> 16;
 
