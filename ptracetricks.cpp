@@ -123,6 +123,24 @@ static void IgnoreCtrlC(void);
 
 typedef boost::format fmt;
 
+namespace syscalls {
+
+constexpr unsigned NR_MAX = std::max<unsigned>({0u
+
+#define SYSCALL_DEFINE(nr, nm) ,nr
+#include "syscalls.inc.h"
+
+                            }) +
+                            1u;
+} // namespace syscalls
+
+// syscall names
+const char *syscall_names[syscalls::NR_MAX] = {
+    [0 ... syscalls::NR_MAX - 1] = nullptr,
+#define ___SYSCALL(nr, nm) [nr] = #nm,
+#include "syscalls.inc.h"
+};
+
 int ParentProc(pid_t child) {
   IgnoreCtrlC();
 
@@ -262,6 +280,8 @@ int ParentProc(pid_t child) {
 #else
 #error
 #endif
+
+#if 0
           cout << "sys_" << std::dec << no << '('
             << a1 << ", "
             << a2 << ", "
@@ -269,6 +289,10 @@ int ParentProc(pid_t child) {
             << a4 << ", "
             << a5 << ", "
             << a6 << ')' << endl;
+#else
+          if (const char *nm = syscall_names[no])
+            cout << nm << endl;
+#endif
         } else if (stopsig == SIGTRAP) {
           const unsigned int event = (unsigned int)status >> 16;
 
