@@ -319,6 +319,9 @@ int ParentProc(pid_t child) {
               case syscalls::NR::mprotect:
                 cout << "0x" << std::hex << a1 << ", " << std::dec << a2 << ", " << a3;
                 break;
+              case syscalls::NR::mmap2:
+                cout << "0x" << std::hex << a1 << ", " << std::dec << a2 << ", " << a3 << ", " << a4 << ", " << a5 << ", " << a6;
+                break;
               }
             } catch (...) {
             }
