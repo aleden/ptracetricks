@@ -310,6 +310,8 @@ int ParentProc(pid_t child) {
               case syscalls::NR::exit_group:
                 cout << std::dec << a1;
                 break;
+
+              case syscalls::NR::read:
               case syscalls::NR::write:
                 cout << std::dec << a1 << ", 0x" << std::hex << a2 << ", " << std::dec << a3;
                 break;
@@ -321,6 +323,9 @@ int ParentProc(pid_t child) {
                 break;
               case syscalls::NR::mmap2:
                 cout << "0x" << std::hex << a1 << ", " << std::dec << a2 << ", " << a3 << ", " << a4 << ", " << a5 << ", " << a6;
+                break;
+              case syscalls::NR::munmap:
+                cout << "0x" << std::hex << a1 << ", " << std::dec << a2;
                 break;
               }
             } catch (...) {
