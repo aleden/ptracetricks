@@ -1,7 +1,3 @@
-//
-// usage: #define SYSCALL_DEFINE(nr, name) ...
-//
-
 #ifndef SYSCALL_DEFINE
 #error
 #endif

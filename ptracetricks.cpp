@@ -121,8 +121,6 @@ static void print_command(std::vector<const char *> &arg_vec);
 
 static void IgnoreCtrlC(void);
 
-typedef boost::format fmt;
-
 namespace syscalls {
 
 constexpr unsigned NR_MAX = std::max<unsigned>({0u
@@ -285,19 +283,23 @@ int ParentProc(pid_t child) {
 #error
 #endif
 
-#if 0
-          cout << "sys_" << std::dec << no << '('
-            << a1 << ", "
-            << a2 << ", "
-            << a3 << ", "
-            << a4 << ", "
-            << a5 << ", "
-            << a6 << ')' << endl;
-#else
-          if (no >= 0 && no < syscalls::NR_MAX)
-            if (const char *nm = syscall_names[no])
-              cout << nm << endl;
-#endif
+          if (no >= 0 && no < syscalls::NR_MAX &&
+              syscall_names[no]) {
+            const char *const nm = syscall_names[no];
+
+            assert(nm);
+            cout << nm << '(';
+            switch (no) {
+            case syscalls::NR::openat:
+              cout
+                << dec  << a1
+                << ", " << _ptrace_read_string(child, a2);
+
+            default:
+              break;
+            }
+            cout << ')' << endl;
+          }
         } else if (stopsig == SIGTRAP) {
           const unsigned int event = (unsigned int)status >> 16;
 
@@ -453,8 +455,8 @@ unsigned long _ptrace_peekdata(pid_t child, uintptr_t addr) {
   unsigned long _data = reinterpret_cast<unsigned long>(&res);
 
   if (syscall(__NR_ptrace, _request, _pid, _addr, _data) < 0)
-    throw std::runtime_error((fmt("PTRACE_PEEKDATA(%d, %p) failed : %s") %
-			      child % addr % strerror(errno)).str());
+    throw std::runtime_error(std::string("PTRACE_PEEKDATA failed : ") +
+                             std::string(strerror(errno)));
 
   return res;
 }
