@@ -287,17 +287,28 @@ int ParentProc(pid_t child) {
               syscall_names[no]) {
             const char *const nm = syscall_names[no];
 
-            assert(nm);
+            //
+            // print syscall
+            //
             cout << nm << '(';
-            switch (no) {
-            case syscalls::NR::openat:
-              cout
-                << dec  << a1
-                << ", " << _ptrace_read_string(child, a2);
 
-            default:
-              break;
+            //
+            // print arguments
+            //
+            try {
+              switch (no) {
+              case syscalls::NR::openat:
+                cout << dec << a1 << ", " << _ptrace_read_string(child, a2);
+                break;
+
+              case syscalls::NR::access:
+                cout << _ptrace_read_string(child, a1) << ", " << std::dec
+                     << a2;
+                break;
+              }
+            } catch (...) {
             }
+
             cout << ')' << endl;
           }
         } else if (stopsig == SIGTRAP) {
