@@ -16,6 +16,7 @@
 #include <asm/unistd.h>
 #include <sys/uio.h>
 #include <boost/format.hpp>
+#include <unordered_map>
 
 #ifndef likely
 #define likely(x)   __builtin_expect(!!(x), 1)
@@ -143,6 +144,21 @@ const char *syscall_names[syscalls::NR_MAX] = {
 #include "syscalls.inc.h"
 };
 
+struct child_syscall_state_t {
+  unsigned no;
+  unsigned long a1;
+  unsigned long a2;
+  unsigned long a3;
+  unsigned long a4;
+  unsigned long a5;
+  unsigned long a6;
+  unsigned int dir : 1;
+
+  child_syscall_state_t() : dir(0) {}
+};
+
+static std::unordered_map<pid_t, child_syscall_state_t> children_syscall_state;
+
 int ParentProc(pid_t child) {
   IgnoreCtrlC();
 
@@ -228,110 +244,173 @@ int ParentProc(pid_t child) {
           // if the PTRACE_O_TRACESYSGOOD option was set by the tracer- then
           // WSTOPSIG(status) will give the value (SIGTRAP | 0x80).
           //
+          child_syscall_state_t &syscall_state = children_syscall_state[child];
+
           user_regs_struct gpr;
           _ptrace_get_gpr(child, gpr);
 
-          //
-          // syscall # and arguments
-          //
+#if defined(__arm__)
+          unsigned dir = gpr.uregs[12];
+#else
+          unsigned dir = syscall_state.dir;
+
+          // toggle direction
+          syscall_state.dir ^= 1;
+#endif
+
+          if (dir == 0 /* enter */) {
+            //
+            // store the arguments and syscall #
+            //
 #if defined(__x86_64__)
-          auto &no = gpr.orig_rax;
+            auto &no = gpr.orig_rax;
 
-          auto &a1 = gpr.rdi;
-          auto &a2 = gpr.rsi;
-          auto &a3 = gpr.rdx;
-          auto &a4 = gpr.r10;
-          auto &a5 = gpr.r8;
-          auto &a6 = gpr.r9;
+            auto &a1 = gpr.rdi;
+            auto &a2 = gpr.rsi;
+            auto &a3 = gpr.rdx;
+            auto &a4 = gpr.r10;
+            auto &a5 = gpr.r8;
+            auto &a6 = gpr.r9;
 #elif defined(__i386__)
-          auto &no = gpr.orig_eax;
+            auto &no = gpr.orig_eax;
 
-          auto &a1 = gpr.ebx;
-          auto &a2 = gpr.ecx;
-          auto &a3 = gpr.edx;
-          auto &a4 = gpr.esi;
-          auto &a5 = gpr.edi;
-          auto &a6 = gpr.ebp;
+            auto &a1 = gpr.ebx;
+            auto &a2 = gpr.ecx;
+            auto &a3 = gpr.edx;
+            auto &a4 = gpr.esi;
+            auto &a5 = gpr.edi;
+            auto &a6 = gpr.ebp;
 #elif defined(__aarch64__)
-          auto &no = gpr.regs[8];
+            auto &no = gpr.regs[8];
 
-          auto &a1 = gpr.regs[0];
-          auto &a2 = gpr.regs[1];
-          auto &a3 = gpr.regs[2];
-          auto &a4 = gpr.regs[3];
-          auto &a5 = gpr.regs[4];
-          auto &a6 = gpr.regs[5];
+            auto &a1 = gpr.regs[0];
+            auto &a2 = gpr.regs[1];
+            auto &a3 = gpr.regs[2];
+            auto &a4 = gpr.regs[3];
+            auto &a5 = gpr.regs[4];
+            auto &a6 = gpr.regs[5];
 #elif defined(__arm__)
-          auto &no = gpr.uregs[7];
+            auto &no = gpr.uregs[7];
 
-          auto &a1 = gpr.uregs[0];
-          auto &a2 = gpr.uregs[1];
-          auto &a3 = gpr.uregs[2];
-          auto &a4 = gpr.uregs[3];
-          auto &a5 = gpr.uregs[4];
-          auto &a6 = gpr.uregs[5];
+            auto &a1 = gpr.uregs[0];
+            auto &a2 = gpr.uregs[1];
+            auto &a3 = gpr.uregs[2];
+            auto &a4 = gpr.uregs[3];
+            auto &a5 = gpr.uregs[4];
+            auto &a6 = gpr.uregs[5];
 #elif defined(__mips64) || defined(__mips__)
-          auto &no = gpr.regs[2];
+            auto &no = gpr.regs[2];
 
-          auto &a1 = gpr.regs[4];
-          auto &a2 = gpr.regs[5];
-          auto &a3 = gpr.regs[6];
-          auto &a4 = gpr.regs[7];
-          auto &a5 = gpr.regs[8];
-          auto &a6 = gpr.regs[9];
+            auto &a1 = gpr.regs[4];
+            auto &a2 = gpr.regs[5];
+            auto &a3 = gpr.regs[6];
+            auto &a4 = gpr.regs[7];
+            auto &a5 = gpr.regs[8];
+            auto &a6 = gpr.regs[9];
 #else
 #error
 #endif
 
-          if (no >= 0 && no < syscalls::NR_MAX &&
-              syscall_names[no]) {
-            const char *const nm = syscall_names[no];
+            syscall_state.no = no;
+            syscall_state.a1 = a1;
+            syscall_state.a2 = a2;
+            syscall_state.a3 = a3;
+            syscall_state.a4 = a4;
+            syscall_state.a5 = a5;
+            syscall_state.a6 = a6;
+          } else { /* exit */
+#if defined(__x86_64__)
+            auto &ret = gpr.rax;
+#elif defined(__i386__)
+            auto &ret = gpr.eax;
+#elif defined(__aarch64__)
+            auto &ret = gpr.regs[0];
+#elif defined(__arm__)
+            auto &ret = gpr.uregs[0];
+#elif defined(__mips64) || defined(__mips__)
+            auto &ret = gpr.regs[0];
+#else
+#error
+#endif
+            auto &a1 = syscall_state.a1;
+            auto &a2 = syscall_state.a2;
+            auto &a3 = syscall_state.a3;
+            auto &a4 = syscall_state.a4;
+            auto &a5 = syscall_state.a5;
+            auto &a6 = syscall_state.a6;
+            auto &no = syscall_state.no;
 
-            //
-            // print syscall
-            //
-            cout << nm << '(';
+            if (no >= 0 &&
+                no < syscalls::NR_MAX &&
+                syscall_names[no]) {
+              const char *const nm = syscall_names[no];
 
-            //
-            // print arguments
-            //
-            try {
+              //
+              // print syscall
+              //
+              cout << nm << '(';
+
+              //
+              // print arguments
+              //
+              try {
+                switch (no) {
+                case syscalls::NR::openat:
+                  cout << dec << a1 << ", " << _ptrace_read_string(child, a2);
+                  break;
+                case syscalls::NR::access:
+                  cout << _ptrace_read_string(child, a1) << ", " << std::dec
+                       << a2;
+                  break;
+                case syscalls::NR::close:
+                  cout << std::dec << a1;
+                  break;
+                case syscalls::NR::exit_group:
+                  cout << std::dec << a1;
+                  break;
+
+                case syscalls::NR::read:
+                case syscalls::NR::write:
+                  cout << std::dec << a1 << ", 0x" << std::hex << a2 << ", " << std::dec << a3;
+                  break;
+                case syscalls::NR::brk:
+                  cout << "0x" << std::hex << a1;
+                  break;
+                case syscalls::NR::mprotect:
+                  cout << "0x" << std::hex << a1 << ", " << std::dec << a2 << ", " << a3;
+                  break;
+                case syscalls::NR::mmap2:
+                  cout << "0x" << std::hex << a1 << ", " << std::dec << a2 << ", " << a3 << ", " << a4 << ", " << a5 << ", " << a6;
+                  break;
+                case syscalls::NR::munmap:
+                  cout << "0x" << std::hex << a1 << ", " << std::dec << a2;
+                  break;
+                }
+              } catch (...) {
+              }
+
+              bool IsRetPointer = false;
               switch (no) {
-              case syscalls::NR::openat:
-                cout << dec << a1 << ", " << _ptrace_read_string(child, a2);
-                break;
-              case syscalls::NR::access:
-                cout << _ptrace_read_string(child, a1) << ", " << std::dec
-                     << a2;
-                break;
-              case syscalls::NR::close:
-                cout << std::dec << a1;
-                break;
-              case syscalls::NR::exit_group:
-                cout << std::dec << a1;
+              case syscalls::NR::brk:
+              case syscalls::NR::mprotect:
+              case syscalls::NR::mmap2:
+              case syscalls::NR::munmap:
+                IsRetPointer = true;
                 break;
 
-              case syscalls::NR::read:
-              case syscalls::NR::write:
-                cout << std::dec << a1 << ", 0x" << std::hex << a2 << ", " << std::dec << a3;
-                break;
-              case syscalls::NR::brk:
-                cout << "0x" << std::hex << a1;
-                break;
-              case syscalls::NR::mprotect:
-                cout << "0x" << std::hex << a1 << ", " << std::dec << a2 << ", " << a3;
-                break;
-              case syscalls::NR::mmap2:
-                cout << "0x" << std::hex << a1 << ", " << std::dec << a2 << ", " << a3 << ", " << a4 << ", " << a5 << ", " << a6;
-                break;
-              case syscalls::NR::munmap:
-                cout << "0x" << std::hex << a1 << ", " << std::dec << a2;
+              default:
                 break;
               }
-            } catch (...) {
-            }
 
-            cout << ')' << endl;
+              cout << ") = ";
+
+              if (IsRetPointer)
+                cout << "0x" << std::hex << ret;
+              else
+                cout << std::dec << ret;
+
+              cout << endl;
+            }
           }
         } else if (stopsig == SIGTRAP) {
           const unsigned int event = (unsigned int)status >> 16;
