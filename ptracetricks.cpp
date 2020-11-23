@@ -393,7 +393,6 @@ int ParentProc(pid_t child) {
               switch (no) {
               case syscalls::NR::brk:
               case syscalls::NR::mmap2:
-              case syscalls::NR::munmap:
                 IsRetPointer = true;
                 break;
 
