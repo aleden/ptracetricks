@@ -104,7 +104,7 @@ namespace ptracetricks {
 
 static bool SeenExec = false;
 
-#ifdef __arm__
+#if defined(__mips__) || defined(__arm__)
 typedef struct pt_regs user_regs_struct;
 #endif
 
