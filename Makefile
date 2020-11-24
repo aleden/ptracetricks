@@ -18,7 +18,7 @@ CXXFLAGS += $(filter-out -fno-exceptions,$(shell $(LLVM_CONFIG) --cxxflags))
 LLVM_COMPONENTS := core
 
 LDFLAGS := $(shell $(LLVM_CONFIG) --ldflags)
-LDFLAGS += $(shell $(LLVM_CONFIG) --libs $(LLVM_COMPONENTS))
+LDFLAGS += $(shell $(LLVM_CONFIG) --link-static --libs $(LLVM_COMPONENTS))
 
 ptracetricks: ptracetricks.cpp
 	@echo CXX $@
