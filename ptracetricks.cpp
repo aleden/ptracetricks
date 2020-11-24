@@ -253,6 +253,8 @@ int ParentProc(pid_t child) {
               gpr.eip
 #elif defined(__aarch64__)
               gpr.pc
+#elif defined(__arm__)
+              gpr.uregs[15]
 #elif defined(__mips64) || defined(__mips__)
               gpr.cp0_epc
 #else
