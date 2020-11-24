@@ -372,11 +372,10 @@ int ParentProc(pid_t child) {
               try {
                 switch (no) {
                 case syscalls::NR::openat:
-                  cout << dec << a1 << ", " << _ptrace_read_string(child, a2);
+                  cout << dec << a1 << ", \"" << _ptrace_read_string(child, a2) << '\"';
                   break;
                 case syscalls::NR::access:
-                  cout << _ptrace_read_string(child, a1) << ", " << std::dec
-                       << a2;
+                  cout << '\"' << _ptrace_read_string(child, a1) << "\", " << std::dec << a2;
                   break;
                 case syscalls::NR::close:
                   cout << std::dec << a1;
