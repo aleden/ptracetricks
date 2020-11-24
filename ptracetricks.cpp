@@ -146,12 +146,7 @@ static const char *syscall_names[syscalls::NR_MAX] = {
 
 struct child_syscall_state_t {
   unsigned no;
-  unsigned long a1;
-  unsigned long a2;
-  unsigned long a3;
-  unsigned long a4;
-  unsigned long a5;
-  unsigned long a6;
+  long a1, a2, a3, a4, a5, a6;
   unsigned int dir : 1;
 
   unsigned long pc;
@@ -269,14 +264,12 @@ int ParentProc(pid_t child) {
           // determine whether this syscall is entering or has exited
           //
 #if defined(__arm__)
-          unsigned dir = gpr.uregs[12];
+          unsigned dir = gpr.uregs[12]; /* unambiguous */
 #else
           unsigned dir = syscall_state.dir;
 
-          if (syscall_state.pc != pc) {
-            // this is a clue
-            dir = 0;
-          }
+          if (syscall_state.pc != pc)
+            dir = 0; /* we must see the same pc twice */
 #endif
 
           if (dir == 0 /* enter */) {
