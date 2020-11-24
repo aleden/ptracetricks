@@ -18,12 +18,16 @@
 #include <boost/format.hpp>
 #include <unordered_map>
 
+#include <llvm/Support/CommandLine.h>
+
 #ifndef likely
 #define likely(x)   __builtin_expect(!!(x), 1)
 #endif
 #ifndef unlikely
 #define unlikely(x)   __builtin_expect(!!(x), 0)
 #endif
+
+namespace cl = llvm::cl;
 
 using namespace std;
 
@@ -354,7 +358,7 @@ int ParentProc(pid_t child) {
 #elif defined(__arm__)
                 gpr.uregs[0]
 #elif defined(__mips64) || defined(__mips__)
-                gpr.regs[2];
+                gpr.regs[2]
 #else
 #error
 #endif
