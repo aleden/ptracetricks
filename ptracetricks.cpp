@@ -314,7 +314,7 @@ int ParentProc(pid_t child) {
             auto &a4 = gpr.uregs[3];
             auto &a5 = gpr.uregs[4];
             auto &a6 = gpr.uregs[5];
-#elif defined(__mips64) || defined(__mips__)
+#elif defined(__mips64)
             auto &no = gpr.regs[2];
 
             auto &a1 = gpr.regs[4];
@@ -323,6 +323,19 @@ int ParentProc(pid_t child) {
             auto &a4 = gpr.regs[7];
             auto &a5 = gpr.regs[8];
             auto &a6 = gpr.regs[9];
+#elif defined(__mips__)
+            auto &no = gpr.regs[2];
+
+            auto &a1 = gpr.regs[4];
+            auto &a2 = gpr.regs[5];
+            auto &a3 = gpr.regs[6];
+            auto &a4 = gpr.regs[7];
+
+            long _a5 = _ptrace_peekdata(child, gpr.regs[29 /* sp */] + 16);
+            long _a6 = _ptrace_peekdata(child, gpr.regs[29 /* sp */] + 20);
+
+            auto &a5 = _a5;
+            auto &a6 = _a6;
 #else
 #error
 #endif
@@ -399,6 +412,14 @@ int ParentProc(pid_t child) {
                   break;
                 case syscalls::NR::munmap:
                   cout << "0x" << std::hex << a1 << ", " << std::dec << a2;
+                  break;
+                case syscalls::NR::prctl:
+                  cout << std::dec
+                       << a1 << ", "
+                       << a2 << ", "
+                       << a3 << ", "
+                       << a4 << ", "
+                       << a5;
                   break;
                 }
               } catch (...) {
