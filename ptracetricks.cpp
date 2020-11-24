@@ -265,6 +265,9 @@ int ParentProc(pid_t child) {
 #endif
               ;
 
+          //
+          // determine whether this syscall is entering or has exited
+          //
 #if defined(__arm__)
           unsigned dir = gpr.uregs[12];
 #else
