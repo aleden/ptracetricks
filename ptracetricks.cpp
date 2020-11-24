@@ -154,7 +154,9 @@ struct child_syscall_state_t {
   unsigned long a6;
   unsigned int dir : 1;
 
-  child_syscall_state_t() : dir(0) {}
+  unsigned long pc;
+
+  child_syscall_state_t() : dir(0), pc(0) {}
 };
 
 static std::unordered_map<pid_t, child_syscall_state_t> children_syscall_state;
@@ -249,13 +251,29 @@ int ParentProc(pid_t child) {
           user_regs_struct gpr;
           _ptrace_get_gpr(child, gpr);
 
+          auto &pc =
+#if defined(__x86_64__)
+              gpr.rip
+#elif defined(__i386__)
+              gpr.eip
+#elif defined(__aarch64__)
+              gpr.pc
+#elif defined(__mips64) || defined(__mips__)
+              gpr.cp0_epc
+#else
+#error
+#endif
+              ;
+
 #if defined(__arm__)
           unsigned dir = gpr.uregs[12];
 #else
-          unsigned dir = (syscall_state.dir ^ 1);
+          unsigned dir = syscall_state.dir;
 
-          // toggle direction
-          syscall_state.dir ^= 1;
+          if (syscall_state.pc != pc) {
+            // this is a clue
+            dir = 0;
+          }
 #endif
 
           if (dir == 0 /* enter */) {
@@ -410,6 +428,11 @@ int ParentProc(pid_t child) {
               cout << endl;
             }
           }
+
+          dir ^= 1;
+
+          syscall_state.pc = pc;
+          syscall_state.dir = dir;
         } else if (stopsig == SIGTRAP) {
           const unsigned int event = (unsigned int)status >> 16;
 
