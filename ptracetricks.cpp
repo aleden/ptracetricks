@@ -330,12 +330,8 @@ int ParentProc(pid_t child) {
             auto &a2 = gpr.regs[5];
             auto &a3 = gpr.regs[6];
             auto &a4 = gpr.regs[7];
-
-            long _a5 = _ptrace_peekdata(child, gpr.regs[29 /* sp */] + 16);
-            long _a6 = _ptrace_peekdata(child, gpr.regs[29 /* sp */] + 20);
-
-            auto &a5 = _a5;
-            auto &a6 = _a6;
+            long a5 = _ptrace_peekdata(child, gpr.regs[29 /* sp */] + 16);
+            long a6 = _ptrace_peekdata(child, gpr.regs[29 /* sp */] + 20);
 #else
 #error
 #endif
