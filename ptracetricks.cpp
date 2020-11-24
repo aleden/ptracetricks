@@ -348,19 +348,22 @@ int ParentProc(pid_t child) {
             syscall_state.a5 = a5;
             syscall_state.a6 = a6;
           } else { /* exit */
+            auto &ret =
 #if defined(__x86_64__)
-            auto &ret = gpr.rax;
+                gpr.rax
 #elif defined(__i386__)
-            auto &ret = gpr.eax;
+                gpr.eax
 #elif defined(__aarch64__)
-            auto &ret = gpr.regs[0];
+                gpr.regs[0]
 #elif defined(__arm__)
-            auto &ret = gpr.uregs[0];
+                gpr.uregs[0]
 #elif defined(__mips64) || defined(__mips__)
-            auto &ret = gpr.regs[2];
+                gpr.regs[2];
 #else
 #error
 #endif
+                ;
+
             auto &a1 = syscall_state.a1;
             auto &a2 = syscall_state.a2;
             auto &a3 = syscall_state.a3;
