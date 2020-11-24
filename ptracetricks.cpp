@@ -252,7 +252,7 @@ int ParentProc(pid_t child) {
 #if defined(__arm__)
           unsigned dir = gpr.uregs[12];
 #else
-          unsigned dir = syscall_state.dir;
+          unsigned dir = (syscall_state.dir ^ 1);
 
           // toggle direction
           syscall_state.dir ^= 1;
@@ -328,7 +328,7 @@ int ParentProc(pid_t child) {
 #elif defined(__arm__)
             auto &ret = gpr.uregs[0];
 #elif defined(__mips64) || defined(__mips__)
-            auto &ret = gpr.regs[0];
+            auto &ret = gpr.regs[2];
 #else
 #error
 #endif
