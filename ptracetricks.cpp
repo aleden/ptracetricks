@@ -137,7 +137,7 @@ namespace NR {
 } // namespace NR
 } // namespace syscalls
 
-const char *syscall_names[syscalls::NR_MAX] = {
+static const char *syscall_names[syscalls::NR_MAX] = {
     [0 ... syscalls::NR_MAX - 1] = nullptr,
 
 #define SYSCALL_DEFINE(nr, nm) [nr] = #nm,
