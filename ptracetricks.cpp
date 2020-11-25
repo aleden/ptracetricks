@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <iostream>
 #include <cstring>
 #include <memory>
@@ -18,6 +19,8 @@
 #include <boost/format.hpp>
 #include <unordered_map>
 
+#include <llvm/Support/InitLLVM.h>
+//#include <llvm/Support/WithColor.h>
 #include <llvm/Support/CommandLine.h>
 
 #ifndef likely
@@ -28,14 +31,47 @@
 #endif
 
 namespace cl = llvm::cl;
+namespace fs = std::filesystem;
+
+//using llvm::WithColor;
 
 using namespace std;
 
 namespace opts {
 
-static const char *Prog;
-static std::vector<const char *> Args;
-static std::vector<const char *> Envs;
+static cl::OptionCategory PtraceTricksCategory("Specific Options");
+
+static cl::opt<std::string> Prog(cl::Positional, cl::desc("prog"), cl::Optional,
+                                 cl::value_desc("filename"),
+                                 cl::cat(PtraceTricksCategory));
+
+static cl::list<std::string> Args("args", cl::CommaSeparated,
+                                  cl::value_desc("arg_1,arg_2,...,arg_n"),
+                                  cl::desc("Program arguments"),
+                                  cl::cat(PtraceTricksCategory));
+
+static cl::list<std::string>
+    Envs("env", cl::CommaSeparated,
+         cl::value_desc("KEY_1=VALUE_1,KEY_2=VALUE_2,...,KEY_n=VALUE_n"),
+         cl::desc("Extra environment variables"),
+         cl::cat(PtraceTricksCategory));
+
+static cl::opt<bool>
+    Verbose("verbose",
+            cl::desc("Print extra information for debugging purposes"),
+            cl::cat(PtraceTricksCategory));
+
+static cl::alias VerboseAlias("v", cl::desc("Alias for -verbose."),
+                              cl::aliasopt(Verbose),
+                              cl::cat(PtraceTricksCategory));
+
+static cl::opt<bool> Syscalls("syscalls", cl::desc("Always trace system calls"),
+                              cl::cat(PtraceTricksCategory));
+
+static cl::alias SyscallsAlias("s", cl::desc("Alias for -syscalls."),
+                               cl::aliasopt(Syscalls),
+                               cl::cat(PtraceTricksCategory));
+
 static bool TraceSyscalls;
 
 } // namespace opts
@@ -84,15 +120,20 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (_argc != 3 ||
-      (_argv[2][0] != 'T' &&
-       _argv[2][0] != '_') ||
-       _argv[2][1] != '\0') {
-    cerr << "usage: ptracetricks [PROG] [T|_] -- ARG...\n" << endl;
+  llvm::InitLLVM X(_argc, _argv);
+
+  cl::HideUnrelatedOptions({&opts::PtraceTricksCategory /* , &llvm::ColorCategory */});
+  cl::ParseCommandLineOptions(_argc, _argv, "Jove Dynamic Analysis\n");
+
+  if (!fs::exists(fs::path(opts::Prog.c_str()))) {
+    //WithColor::error() << "program does not exist\n";
+    cerr << "given program does not exist";
     return 1;
   }
 
   cout << "ptracetricks " << _argv[1] << endl;
+
+#if 0
 
   opts::Prog          = _argv[1];
   opts::TraceSyscalls = _argv[2][0] == 'T';
@@ -102,6 +143,9 @@ int main(int argc, char **argv) {
     return ptracetricks::ChildProc();
 
   return ptracetricks::ParentProc(child);
+#else
+  return 0;
+#endif
 }
 
 namespace ptracetricks {
@@ -643,10 +687,10 @@ int ChildProc(void) {
   //
 
   std::vector<const char *> arg_vec;
-  arg_vec.push_back(opts::Prog);
+  arg_vec.push_back(opts::Prog.c_str());
 
-  for (const char *Arg : opts::Args)
-    arg_vec.push_back(Arg);
+  for (const std::string &Arg : opts::Args)
+    arg_vec.push_back(Arg.c_str());
 
   arg_vec.push_back(nullptr);
 
@@ -656,8 +700,8 @@ int ChildProc(void) {
 
   //env_vec.push_back("LD_BIND_NOW=1");
 
-  for (const char *Env : opts::Envs)
-    env_vec.push_back(Env);
+  for (const std::string &Env : opts::Envs)
+    env_vec.push_back(Env.c_str());
 
   env_vec.push_back(nullptr);
 

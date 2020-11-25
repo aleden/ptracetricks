@@ -10,16 +10,20 @@ CXXFLAGS  := -Ofast \
              -Wall \
              -Wno-initializer-overrides \
              -Wno-c99-designator \
-             -std=gnu++14 \
              -I arch/$(ARCH)
 
 CXXFLAGS += $(filter-out -fno-exceptions,$(shell $(LLVM_CONFIG) --cxxflags))
+
+CXXFLAGS += -std=gnu++17
 
 LLVM_COMPONENTS := core
 
 LDFLAGS := $(shell $(LLVM_CONFIG) --ldflags)
 LDFLAGS += $(shell $(LLVM_CONFIG) --link-static --libs $(LLVM_COMPONENTS))
+LDFLAGS += -pthread
+LDFLAGS += -latomic
+LDFLAGS += -ltinfo
 
 ptracetricks: ptracetricks.cpp
 	@echo CXX $@
-	$(LLVM_CLANGXX) -o $@ $(CXXFLAGS) $< -static $(LDFLAGS)
+	$(LLVM_CLANGXX) -o $@ $(CXXFLAGS) $< $(LDFLAGS)
