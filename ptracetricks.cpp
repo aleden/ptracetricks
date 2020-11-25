@@ -50,6 +50,10 @@ static cl::list<std::string> Args("args", cl::CommaSeparated,
                                   cl::desc("Program arguments"),
                                   cl::cat(PtraceTricksCategory));
 
+static cl::opt<unsigned> PID("attach", cl::value_desc("pid"),
+                             cl::desc("Attach to existing process"),
+                             cl::cat(PtraceTricksCategory));
+
 static cl::list<std::string>
     Envs("env", cl::CommaSeparated,
          cl::value_desc("KEY_1=VALUE_1,KEY_2=VALUE_2,...,KEY_n=VALUE_n"),
@@ -71,8 +75,6 @@ static cl::opt<bool> Syscalls("syscalls", cl::desc("Always trace system calls"),
 static cl::alias SyscallsAlias("s", cl::desc("Alias for -syscalls."),
                                cl::aliasopt(Syscalls),
                                cl::cat(PtraceTricksCategory));
-
-static bool TraceSyscalls;
 
 } // namespace opts
 
@@ -123,29 +125,29 @@ int main(int argc, char **argv) {
   llvm::InitLLVM X(_argc, _argv);
 
   cl::HideUnrelatedOptions({&opts::PtraceTricksCategory /* , &llvm::ColorCategory */});
-  cl::ParseCommandLineOptions(_argc, _argv, "Jove Dynamic Analysis\n");
+  cl::ParseCommandLineOptions(_argc, _argv, "stupid ptrace tricks\n");
 
-  if (!fs::exists(fs::path(opts::Prog.c_str()))) {
-    //WithColor::error() << "program does not exist\n";
-    cerr << "given program does not exist";
+  if (opts::PID) {
+    //
+    // mode 1: attach to existing process
+    //
+    cerr << "TODO!\n";
     return 1;
+  } else {
+    //
+    // mode 2: execute the given process
+    //
+    if (!fs::exists(fs::path(opts::Prog.c_str()))) {
+      cerr << "given program does not exist";
+      return 1;
+    }
+
+    pid_t child = fork();
+    if (!child)
+      return ptracetricks::ChildProc();
+
+    return ptracetricks::ParentProc(child);
   }
-
-  cout << "ptracetricks " << _argv[1] << endl;
-
-#if 0
-
-  opts::Prog          = _argv[1];
-  opts::TraceSyscalls = _argv[2][0] == 'T';
-
-  pid_t child = fork();
-  if (!child)
-    return ptracetricks::ChildProc();
-
-  return ptracetricks::ParentProc(child);
-#else
-  return 0;
-#endif
 }
 
 namespace ptracetricks {
@@ -243,7 +245,7 @@ int ParentProc(pid_t child) {
   try {
     for (;;) {
       if (likely(!(child < 0))) {
-        if (unlikely(ptrace(SeenExec && opts::TraceSyscalls
+        if (unlikely(ptrace(SeenExec && opts::Syscalls
                                 ? PTRACE_SYSCALL
                                 : PTRACE_CONT,
                             child, nullptr, reinterpret_cast<void *>(sig)) < 0))
