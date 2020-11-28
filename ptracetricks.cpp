@@ -54,6 +54,9 @@ static cl::opt<unsigned> PID("attach", cl::value_desc("pid"),
                              cl::desc("Attach to existing process"),
                              cl::cat(PtraceTricksCategory));
 
+static cl::alias PIDAlias("p", cl::desc("Alias for -attach."),
+                          cl::aliasopt(PID), cl::cat(PtraceTricksCategory));
+
 static cl::list<std::string>
     Envs("env", cl::CommaSeparated,
          cl::value_desc("KEY_1=VALUE_1,KEY_2=VALUE_2,...,KEY_n=VALUE_n"),
@@ -82,6 +85,22 @@ namespace ptracetricks {
 
 static int ChildProc(void);
 static int ParentProc(pid_t child);
+
+static bool SeenExec = false;
+
+static void IgnoreCtrlC(void) {
+  struct sigaction sa;
+
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+  sa.sa_handler = SIG_IGN;
+
+  if (sigaction(SIGINT, &sa, nullptr) < 0) {
+    int err = errno;
+    cerr << "sigaction failed (" << strerror(err) << ")\n";
+  }
+}
+
 
 } // namespace ptracetricks
 
@@ -127,32 +146,57 @@ int main(int argc, char **argv) {
   cl::HideUnrelatedOptions({&opts::PtraceTricksCategory /* , &llvm::ColorCategory */});
   cl::ParseCommandLineOptions(_argc, _argv, "stupid ptrace tricks\n");
 
-  if (opts::PID) {
+  //
+  // ptracetricks has two modes of execution.
+  //
+  // (1) Trace existing process (--attach pid)
+  // (2) Trace newly created process (PROG -- ARG_1 ARG_2 ... ARG_N)
+  //
+  if (pid_t child = opts::PID) {
     //
-    // mode 1: attach to existing process
+    // mode 1: attach
     //
-    cerr << "TODO!\n";
-    return 1;
+    if (ptrace(PTRACE_ATTACH, child, 0, 0) < 0) {
+      cerr << "PTRACE_ATTACH failed (" << strerror(errno) << ")\n";
+      return 1;
+    }
+
+    ptracetricks::SeenExec = true; /* XXX */
+    return ptracetricks::ParentProc(child);
   } else {
     //
-    // mode 2: execute the given process
+    // mode 2: exec
     //
-    if (!fs::exists(fs::path(opts::Prog.c_str()))) {
+    if (!fs::exists(opts::Prog.c_str())) {
       cerr << "given program does not exist";
       return 1;
     }
 
-    pid_t child = fork();
+    child = fork();
     if (!child)
       return ptracetricks::ChildProc();
+
+    //
+    // observe the (initial) signal-delivery-stop
+    //
+    cerr << "parent: waiting for initial stop of child " << child << "...\n";
+
+    {
+      int status;
+      do
+        waitpid(child, &status, 0);
+      while (!WIFSTOPPED(status));
+    }
+
+    cerr << "parent: initial stop observed\n";
+
+    ptracetricks::IgnoreCtrlC(); /* XXX */
 
     return ptracetricks::ParentProc(child);
   }
 }
 
 namespace ptracetricks {
-
-static bool SeenExec = false;
 
 #if defined(__mips__) || defined(__arm__)
 typedef struct pt_regs user_regs_struct;
@@ -169,8 +213,6 @@ static void _ptrace_pokedata(pid_t, uintptr_t addr, unsigned long data);
 static ssize_t _ptrace_memcpy(pid_t, void *dest, const void *src, size_t n);
 
 static void print_command(std::vector<const char *> &arg_vec);
-
-static void IgnoreCtrlC(void);
 
 namespace syscalls {
 
@@ -207,22 +249,6 @@ struct child_syscall_state_t {
 static std::unordered_map<pid_t, child_syscall_state_t> children_syscall_state;
 
 int ParentProc(pid_t child) {
-  IgnoreCtrlC();
-
-  //
-  // observe the (initial) signal-delivery-stop
-  //
-  cerr << "parent: waiting for initial stop of child " << child << "...\n";
-
-  {
-    int status;
-    do
-      waitpid(child, &status, 0);
-    while (!WIFSTOPPED(status));
-  }
-
-  cerr << "parent: initial stop observed\n";
-
   //
   // select ptrace options
   //
@@ -445,7 +471,9 @@ int ParentProc(pid_t child) {
                 case syscalls::NR::exit_group:
                   cout << std::dec << a1;
                   break;
-
+                case syscalls::NR::stat64:
+                  cout << '\"' << _ptrace_read_string(child, a1) << "\", 0x" << std::hex << a2;
+                  break;
                 case syscalls::NR::read:
                 case syscalls::NR::write:
                   cout << std::dec << a1 << ", 0x" << std::hex << a2 << ", " << std::dec << a3;
@@ -581,19 +609,6 @@ int ParentProc(pid_t child) {
   }
 
   return 0;
-}
-
-void IgnoreCtrlC(void) {
-  struct sigaction sa;
-
-  sigemptyset(&sa.sa_mask);
-  sa.sa_flags = 0;
-  sa.sa_handler = SIG_IGN;
-
-  if (sigaction(SIGINT, &sa, nullptr) < 0) {
-    int err = errno;
-    cerr << "sigaction failed (" << strerror(err) << ")\n";
-  }
 }
 
 void _ptrace_get_gpr(pid_t child, user_regs_struct &out) {
