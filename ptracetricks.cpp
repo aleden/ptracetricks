@@ -479,7 +479,14 @@ int ParentProc(pid_t child) {
                 case syscalls::NR::stat64:
                   cout << '\"' << _ptrace_read_string(child, a1) << "\", 0x" << std::hex << a2;
                   break;
+                case syscalls::NR::clock_settime:
+                case syscalls::NR::clock_gettime:
+                  cout << std::dec << a1 << ", " << "0x" << std::hex << a2;
+                  break;
+                case syscalls::NR::recv:
+                case syscalls::NR::readv:
                 case syscalls::NR::read:
+                case syscalls::NR::writev:
                 case syscalls::NR::write:
                   cout << std::dec << a1 << ", 0x" << std::hex << a2 << ", " << std::dec << a3;
                   break;
