@@ -261,7 +261,9 @@ int ParentProc(pid_t child) {
   //
   cerr << "parent: setting ptrace options...\n";
 
-  ptrace(PTRACE_SETOPTIONS, child, 0, ptrace_options);
+  if (ptrace(PTRACE_SETOPTIONS, child, 0, ptrace_options) < 0)
+    cerr << "warning: PTRACE_SETOPTIONS failed (" << strerror(errno) << ')'
+         << endl;
 
   cerr << "ptrace options set!\n";
 
@@ -470,6 +472,9 @@ int ParentProc(pid_t child) {
                   break;
                 case syscalls::NR::exit_group:
                   cout << std::dec << a1;
+                  break;
+                case syscalls::NR::fstat64:
+                  cout << std::dec << a1 << ", " << "0x" << std::hex << a2;
                   break;
                 case syscalls::NR::stat64:
                   cout << '\"' << _ptrace_read_string(child, a1) << "\", 0x" << std::hex << a2;
