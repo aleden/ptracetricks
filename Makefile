@@ -16,13 +16,13 @@ CXXFLAGS += $(filter-out -fno-exceptions,$(shell $(LLVM_CONFIG) --cxxflags))
 
 CXXFLAGS += -std=gnu++17
 
-LLVM_COMPONENTS := core
+LLVM_COMPONENTS := core \
+                   native
 
 LDFLAGS := $(shell $(LLVM_CONFIG) --ldflags)
 LDFLAGS += $(shell $(LLVM_CONFIG) --link-static --libs $(LLVM_COMPONENTS))
-LDFLAGS += -pthread
+LDFLAGS += $(shell $(LLVM_CONFIG) --link-static --system-libs)
 LDFLAGS += -latomic
-LDFLAGS += -ltinfo
 
 ptracetricks: ptracetricks.cpp
 	@echo CXX $@

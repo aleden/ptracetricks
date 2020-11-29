@@ -20,8 +20,9 @@
 #include <unordered_map>
 
 #include <llvm/Support/InitLLVM.h>
-//#include <llvm/Support/WithColor.h>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Support/TargetSelect.h>
+//#include <llvm/Support/WithColor.h>
 
 #ifndef likely
 #define likely(x)   __builtin_expect(!!(x), 1)
@@ -249,6 +250,9 @@ struct child_syscall_state_t {
 static std::unordered_map<pid_t, child_syscall_state_t> children_syscall_state;
 
 int ParentProc(pid_t child) {
+  llvm::InitializeNativeTarget();
+  llvm::InitializeNativeTargetDisassembler();
+
   //
   // select ptrace options
   //
@@ -259,13 +263,9 @@ int ParentProc(pid_t child) {
   //
   // set those options
   //
-  cerr << "parent: setting ptrace options...\n";
-
   if (ptrace(PTRACE_SETOPTIONS, child, 0, ptrace_options) < 0)
     cerr << "warning: PTRACE_SETOPTIONS failed (" << strerror(errno) << ')'
          << endl;
-
-  cerr << "ptrace options set!\n";
 
   siginfo_t si;
   long sig = 0;
