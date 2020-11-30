@@ -679,7 +679,7 @@ int ParentProc(pid_t child) {
                 std::vector<uint8_t> insn_bytes;
                 insn_bytes.resize(sizeof(insn_data));
 
-                __builtin_memcpy(&insn_bytes[0], &insn_data, insn_bytes.size());
+                __builtin_memcpy(&insn_bytes[0], &insn_data, sizeof(insn_data));
 
                 llvm::MCInst Inst;
 
