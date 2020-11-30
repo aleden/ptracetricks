@@ -382,31 +382,8 @@ int ParentProc(pid_t child) {
 
       IP->printInst(&Inst, 0x0 /* XXX */, "", *STI, ss);
 
-#if 0
-      ss << '\n';
-      ss << "[opcode: " << Inst.getOpcode() << ']';
-      for (unsigned i = 0; i < Inst.getNumOperands(); ++i) {
-        const llvm::MCOperand &opnd = Inst.getOperand(i);
-
-        char buff[0x100];
-        if (opnd.isReg())
-          snprintf(buff, sizeof(buff), "<reg %u>", opnd.getReg());
-        else if (opnd.isImm())
-          snprintf(buff, sizeof(buff), "<imm %" PRId64 ">", opnd.getImm());
-        else if (opnd.isFPImm())
-          snprintf(buff, sizeof(buff), "<imm %lf>", opnd.getFPImm());
-        else if (opnd.isExpr())
-          snprintf(buff, sizeof(buff), "<expr>");
-        else if (opnd.isInst())
-          snprintf(buff, sizeof(buff), "<inst>");
-        else
-          snprintf(buff, sizeof(buff), "<unknown>");
-
-        ss << (fmt(" %u:%s") % i % buff).str();
-      }
-
-      ss << '\n';
-#endif
+      if (opts::Verbose)
+        ss << '\n' << Inst << '\n';
     }
 
     return res;
