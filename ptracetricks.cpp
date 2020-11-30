@@ -21,7 +21,18 @@
 
 #include <llvm/Support/InitLLVM.h>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Support/TargetRegistry.h>
 #include <llvm/Support/TargetSelect.h>
+#include <llvm/Object/Binary.h>
+#include <llvm/Object/ELFObjectFile.h>
+#include <llvm/MC/SubtargetFeature.h>
+#include <llvm/MC/MCTargetOptions.h>
+#include <llvm/MC/MCObjectFileInfo.h>
+#include <llvm/MC/MCAsmInfo.h>
+#include <llvm/MC/MCContext.h>
+#include <llvm/MC/MCDisassembler/MCDisassembler.h>
+#include <llvm/MC/MCInstPrinter.h>
+#include <llvm/MC/MCInstrInfo.h>
 //#include <llvm/Support/WithColor.h>
 
 #ifndef likely
@@ -31,6 +42,7 @@
 #define unlikely(x)   __builtin_expect(!!(x), 0)
 #endif
 
+namespace obj = llvm::object;
 namespace cl = llvm::cl;
 namespace fs = std::filesystem;
 
@@ -249,9 +261,156 @@ struct child_syscall_state_t {
 
 static std::unordered_map<pid_t, child_syscall_state_t> children_syscall_state;
 
+#if defined(__x86_64__) || defined(__aarch64__) || defined(__mips64)
+typedef typename obj::ELF64LE ELFT;
+#elif defined(__i386__) || defined(__mips__) || defined(__arm__)
+typedef typename obj::ELF32LE ELFT;
+#else
+#error
+#endif
+
+typedef typename obj::ELFObjectFile<ELFT> ELFO;
+typedef typename obj::ELFFile<ELFT> ELFF;
+
+typedef std::tuple<llvm::MCDisassembler &, const llvm::MCSubtargetInfo &,
+                   llvm::MCInstPrinter &>
+    disas_t;
+
 int ParentProc(pid_t child) {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetDisassembler();
+
+  llvm::Triple TheTriple;
+  llvm::SubtargetFeatures Features;
+
+  {
+    llvm::Expected<obj::OwningBinary<obj::Binary>> BinaryOrErr =
+        obj::createBinary("/proc/self/exe");
+    if (!BinaryOrErr) {
+      fprintf(stderr, "failed to open /proc/self/exe\n");
+      return 1;
+    }
+
+    obj::Binary *B = BinaryOrErr.get().getBinary();
+
+    if (!llvm::isa<ELFO>(B)) {
+      fprintf(stderr, "invalid arch\n");
+      return 1;
+    }
+
+    const ELFO &O = *llvm::cast<ELFO>(B);
+
+    TheTriple = O.makeTriple();
+    Features = O.getFeatures();
+  }
+
+  //
+  // initialize the LLVM objects necessary for disassembling instructions
+  //
+  std::string ArchName;
+  std::string Error;
+
+  const llvm::Target *TheTarget =
+      llvm::TargetRegistry::lookupTarget(ArchName, TheTriple, Error);
+  if (!TheTarget) {
+    cerr << "failed to lookup target: " << Error << '\n';
+    return 1;
+  }
+
+  std::string TripleName = TheTriple.getTriple();
+  std::string MCPU;
+
+  std::unique_ptr<const llvm::MCRegisterInfo> MRI(
+      TheTarget->createMCRegInfo(TripleName));
+  if (!MRI) {
+    cerr << "no register info for target\n";
+    return 1;
+  }
+
+  llvm::MCTargetOptions Options;
+  std::unique_ptr<const llvm::MCAsmInfo> AsmInfo(
+      TheTarget->createMCAsmInfo(*MRI, TripleName, Options));
+  if (!AsmInfo) {
+    cerr << "no assembly info\n";
+    return 1;
+  }
+
+  std::unique_ptr<const llvm::MCSubtargetInfo> STI(
+      TheTarget->createMCSubtargetInfo(TripleName, MCPU, Features.getString()));
+  if (!STI) {
+    cerr << "no subtarget info\n";
+    return 1;
+  }
+
+  std::unique_ptr<const llvm::MCInstrInfo> MII(TheTarget->createMCInstrInfo());
+  if (!MII) {
+    cerr << "no instruction info\n";
+    return 1;
+  }
+
+  llvm::MCObjectFileInfo MOFI;
+  llvm::MCContext Ctx(AsmInfo.get(), MRI.get(), &MOFI);
+  // FIXME: for now initialize MCObjectFileInfo with default values
+  MOFI.InitMCObjectFileInfo(llvm::Triple(TripleName), false, Ctx);
+
+  std::unique_ptr<llvm::MCDisassembler> DisAsm(
+      TheTarget->createMCDisassembler(*STI, Ctx));
+  if (!DisAsm) {
+    cerr << "no disassembler for target\n";
+    return 1;
+  }
+
+#if defined(__x86_64__) || defined(__i386__)
+  int AsmPrinterVariant = 1; // Intel syntax
+#else
+  int AsmPrinterVariant = AsmInfo->getAssemblerDialect();
+#endif
+  std::unique_ptr<llvm::MCInstPrinter> IP(TheTarget->createMCInstPrinter(
+      llvm::Triple(TripleName), AsmPrinterVariant, *AsmInfo, *MII, *MRI));
+  if (!IP) {
+    cerr << "no instruction printer\n";
+    return 1;
+  }
+
+  //disas_t dis(*DisAsm, std::cref(*STI), *IP);
+
+  auto StringOfMCInst = [&](llvm::MCInst &Inst) -> std::string {
+    std::string res;
+
+    {
+      llvm::raw_string_ostream ss(res);
+
+      IP->printInst(&Inst, 0x0 /* XXX */, "", *STI, ss);
+
+#if 0
+      ss << '\n';
+      ss << "[opcode: " << Inst.getOpcode() << ']';
+      for (unsigned i = 0; i < Inst.getNumOperands(); ++i) {
+        const llvm::MCOperand &opnd = Inst.getOperand(i);
+
+        char buff[0x100];
+        if (opnd.isReg())
+          snprintf(buff, sizeof(buff), "<reg %u>", opnd.getReg());
+        else if (opnd.isImm())
+          snprintf(buff, sizeof(buff), "<imm %" PRId64 ">", opnd.getImm());
+        else if (opnd.isFPImm())
+          snprintf(buff, sizeof(buff), "<imm %lf>", opnd.getFPImm());
+        else if (opnd.isExpr())
+          snprintf(buff, sizeof(buff), "<expr>");
+        else if (opnd.isInst())
+          snprintf(buff, sizeof(buff), "<inst>");
+        else
+          snprintf(buff, sizeof(buff), "<unknown>");
+
+        ss << (fmt(" %u:%s") % i % buff).str();
+      }
+
+      ss << '\n';
+#endif
+    }
+
+    return res;
+  };
 
   //
   // select ptrace options
@@ -533,6 +692,40 @@ int ParentProc(pid_t child) {
                 cout << std::dec << ret;
 
               cout << endl;
+
+              //
+              // disassemble the instruction
+              //
+              {
+                unsigned long insn_data = _ptrace_peekdata(child, pc);
+
+                std::vector<uint8_t> insn_bytes;
+                insn_bytes.resize(sizeof(insn_data));
+
+                __builtin_memcpy(&insn_bytes[0], &insn_data, insn_bytes.size());
+
+                llvm::MCInst Inst;
+
+                std::string errmsg;
+                bool Disassembled;
+                uint64_t InstLen = 0;
+                {
+                  llvm::raw_string_ostream ErrorStrStream(errmsg);
+
+                  Disassembled = DisAsm->getInstruction(
+                      Inst, InstLen, insn_bytes, pc, ErrorStrStream);
+
+                  if (Disassembled) {
+                    //
+                    // print the instruction
+                    //
+                    cout << StringOfMCInst(Inst) << std::endl;
+                  } else {
+                    cerr << "failed to disassemble @ 0x" << std::hex << pc
+                         << std::endl;
+                  }
+                }
+              }
             }
           }
 
