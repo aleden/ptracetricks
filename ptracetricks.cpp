@@ -213,15 +213,13 @@ int main(int argc, char **argv) {
   while ((optc = getopt_long(_argc, _argv, "shvp:", longopts, NULL)) != -1) {
     switch (optc) {
     case 's':
-      cout << "syscalls ON" << endl;
-
       opts::Syscalls = true;
       break;
 
     case 'p':
       assert(optarg);
       opts::PID = atoi(optarg);
-      cout << "PID is " << opts::PID << endl;
+      assert(opts::PID);
       break;
 
     case 'v':
@@ -244,7 +242,7 @@ int main(int argc, char **argv) {
 
   /* Line buffer stdout to ensure lines are written atomically and immediately
      so that processes running in parallel do not intersperse their output.  */
-  setvbuf (stdout, NULL, _IOLBF, 0);
+  setvbuf(stdout, NULL, _IOLBF, 0);
 
   //
   // ptracetricks has two modes of execution.
