@@ -496,9 +496,26 @@ int ParentProc(pid_t child) {
   //
   // set those options
   //
-  if (ptrace(PTRACE_SETOPTIONS, child, 0, ptrace_options) < 0)
-    cerr << "warning: PTRACE_SETOPTIONS failed (" << strerror(errno) << ')'
-         << endl;
+  if (ptrace(PTRACE_SETOPTIONS, child, 0, ptrace_options) < 0) {
+    int err = errno;
+
+    if (err == ESRCH) {
+      int status;
+      child = waitpid(-1, &status, __WALL);
+
+      if (child < 0) {
+        cerr << "waitpid failed (" << strerror(errno) << ')' << endl;
+      } else {
+        if (ptrace(PTRACE_SETOPTIONS, child, 0, ptrace_options) < 0) {
+          cerr << "PTRACE_SETOPTIONS failed (second try): " << strerror(errno)
+               << endl;
+        }
+      }
+    } else {
+      cerr << "PTRACE_SETOPTIONS failed (" << strerror(err) << ')'
+           << endl;
+    }
+  }
 
   siginfo_t si;
   long sig = 0;
