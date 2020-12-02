@@ -7,6 +7,7 @@ LLVM_CLANGXX ?= clang++
 LLVM_CONFIG  ?= llvm-config
 
 CXXFLAGS  := -Ofast \
+             -g \
              -Wall \
              -Wno-initializer-overrides \
              -Wno-c99-designator \
@@ -14,16 +15,28 @@ CXXFLAGS  := -Ofast \
 
 CXXFLAGS += $(filter-out -fno-exceptions,$(shell $(LLVM_CONFIG) --cxxflags))
 
+CXXFLAGS += -fexceptions
 CXXFLAGS += -std=gnu++17
 
-LLVM_COMPONENTS := core \
-                   native
+ifeq "$(ARCH)" "arm"
+#LLVM_COMPONENTS := armdisassembler
+LLVM_COMPONENTS := core native
+else
+LLVM_COMPONENTS := core native
+endif
 
 LDFLAGS := $(shell $(LLVM_CONFIG) --ldflags)
 LDFLAGS += $(shell $(LLVM_CONFIG) --link-static --libs $(LLVM_COMPONENTS))
-LDFLAGS += $(shell $(LLVM_CONFIG) --link-static --system-libs)
+#LDFLAGS += $(shell $(LLVM_CONFIG) --link-static --system-libs)
+LDFLAGS += -pthread
 LDFLAGS += -latomic
+LDFLAGS += -ltinfo
+LDFLAGS += -lz
 
 ptracetricks: ptracetricks.cpp
 	@echo CXX $@
-	$(LLVM_CLANGXX) -o $@ $(CXXFLAGS) $< $(LDFLAGS)
+	$(LLVM_CLANGXX) -o $@ $(CXXFLAGS) $< -static -fPIC $(LDFLAGS)
+
+.PHONY: clean
+clean:
+	rm -f ptracetricks
