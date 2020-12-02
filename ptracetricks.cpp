@@ -232,6 +232,14 @@ int main(int argc, char **argv) {
       ptracetricks::usage();
     }
   }
+
+  if (!opts::PID && opts::Prog.empty()) {
+    for (int index = optind; index < _argc; index++) {
+      //printf("Non-option argument %s\n", _argv[index]);
+      opts::Prog = _argv[index];
+      break;
+    }
+  }
 #endif
 
   /* Line buffer stdout to ensure lines are written atomically and immediately
@@ -477,10 +485,13 @@ int ParentProc(pid_t child) {
   //
   // select ptrace options
   //
-  int ptrace_options = PTRACE_O_TRACESYSGOOD |
-                       PTRACE_O_TRACECLONE | PTRACE_O_TRACEEXEC |
-                       PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK;
-  //PTRACE_O_EXITKILL
+  int ptrace_options = PTRACE_O_TRACESYSGOOD
+                     | PTRACE_O_TRACECLONE
+                     | PTRACE_O_TRACEEXEC
+                     | PTRACE_O_TRACEFORK
+                     | PTRACE_O_TRACEVFORK;
+
+  /* PTRACE_O_EXITKILL */
 
   //
   // set those options
