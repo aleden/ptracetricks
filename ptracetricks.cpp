@@ -42,7 +42,9 @@
 namespace obj = llvm::object;
 namespace cl = llvm::cl;
 
-#endif /* _PTRACETRICKS_NO_LLVM */
+#else
+#include <getopt.h>
+#endif
 
 #ifndef likely
 #define likely(x)   __builtin_expect(!!(x), 1)
@@ -132,6 +134,26 @@ static void IgnoreCtrlC(void) {
   }
 }
 
+#define _NORET __attribute__((noreturn))
+
+static _NORET void usage() {
+  cout << "Usage:\n"
+          "ptracetricks [OPTIONS] PROG -- [ARG_1] [ARG_2] ... [ARG_n]\n"
+          "or\n"
+          "ptracetricks [OPTIONS] --attach PID\n"
+          "\n"
+          "currently the only option is --syscalls (-s)\n";
+  exit(0);
+}
+
+static _NORET void version(void) {
+#ifndef PTRACETRICKS_VERSION
+#error
+#endif
+
+  cout << "version " PTRACETRICKS_VERSION << endl;
+  exit(0);
+}
 
 } // namespace ptracetricks
 
@@ -178,7 +200,43 @@ int main(int argc, char **argv) {
   cl::HideUnrelatedOptions({&opts::PtraceTricksCategory /* , &llvm::ColorCategory */});
   cl::ParseCommandLineOptions(_argc, _argv, "stupid ptrace tricks\n");
 #else
+  static struct option const longopts[] =
+  {
+    {"syscalls", no_argument,       NULL, 's'},
+    {"attach",   required_argument, NULL, 'p'},
+    {"help",     no_argument,       NULL, 'h'},
+    {"version",  no_argument,       NULL, 'v'},
+    {NULL, 0, NULL, 0}
+  };
+
+  int optc;
+  while ((optc = getopt_long(_argc, _argv, "shvp:", longopts, NULL)) != -1) {
+    switch (optc) {
+    case 's':
+      cout << "syscalls ON" << endl;
+
+      opts::Syscalls = true;
+      break;
+
+    case 'p':
+      assert(optarg);
+      opts::PID = atoi(optarg);
+      cout << "PID is " << opts::PID << endl;
+      break;
+
+    case 'v':
+      ptracetricks::version();
+
+    case 'h':
+    default:
+      ptracetricks::usage();
+    }
+  }
 #endif
+
+  /* Line buffer stdout to ensure lines are written atomically and immediately
+     so that processes running in parallel do not intersperse their output.  */
+  setvbuf (stdout, NULL, _IOLBF, 0);
 
   //
   // ptracetricks has two modes of execution.
@@ -419,9 +477,10 @@ int ParentProc(pid_t child) {
   //
   // select ptrace options
   //
-  int ptrace_options = PTRACE_O_TRACESYSGOOD | PTRACE_O_EXITKILL |
+  int ptrace_options = PTRACE_O_TRACESYSGOOD |
                        PTRACE_O_TRACECLONE | PTRACE_O_TRACEEXEC |
                        PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK;
+  //PTRACE_O_EXITKILL
 
   //
   // set those options
