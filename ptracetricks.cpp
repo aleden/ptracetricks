@@ -1,3 +1,5 @@
+#define _PTRACETRICKS_NO_LLVM
+
 #include <filesystem>
 #include <iostream>
 #include <cstring>
@@ -19,6 +21,8 @@
 #include <boost/format.hpp>
 #include <unordered_map>
 
+#ifndef _PTRACETRICKS_NO_LLVM
+
 #include <llvm/Support/InitLLVM.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/TargetRegistry.h>
@@ -35,6 +39,11 @@
 #include <llvm/MC/MCInstrInfo.h>
 //#include <llvm/Support/WithColor.h>
 
+namespace obj = llvm::object;
+namespace cl = llvm::cl;
+
+#endif /* _PTRACETRICKS_NO_LLVM */
+
 #ifndef likely
 #define likely(x)   __builtin_expect(!!(x), 1)
 #endif
@@ -42,8 +51,6 @@
 #define unlikely(x)   __builtin_expect(!!(x), 0)
 #endif
 
-namespace obj = llvm::object;
-namespace cl = llvm::cl;
 namespace fs = std::filesystem;
 
 //using llvm::WithColor;
@@ -52,6 +59,7 @@ using namespace std;
 
 namespace opts {
 
+#ifndef _PTRACETRICKS_NO_LLVM
 static cl::OptionCategory PtraceTricksCategory("Specific Options");
 
 static cl::opt<std::string> Prog(cl::Positional, cl::desc("prog"), cl::Optional,
@@ -91,6 +99,16 @@ static cl::opt<bool> Syscalls("syscalls", cl::desc("Always trace system calls"),
 static cl::alias SyscallsAlias("s", cl::desc("Alias for -syscalls."),
                                cl::aliasopt(Syscalls),
                                cl::cat(PtraceTricksCategory));
+#else
+
+static std::string Prog;
+static std::vector<std::string> Args;
+static std::vector<std::string> Envs;
+static bool Verbose;
+static bool Syscalls;
+static unsigned PID;
+
+#endif /* _PTRACETRICKS_NO_LLVM */
 
 } // namespace opts
 
@@ -154,10 +172,13 @@ int main(int argc, char **argv) {
     }
   }
 
+#ifndef _PTRACETRICKS_NO_LLVM
   llvm::InitLLVM X(_argc, _argv);
 
   cl::HideUnrelatedOptions({&opts::PtraceTricksCategory /* , &llvm::ColorCategory */});
   cl::ParseCommandLineOptions(_argc, _argv, "stupid ptrace tricks\n");
+#else
+#endif
 
   //
   // ptracetricks has two modes of execution.
@@ -261,6 +282,8 @@ struct child_syscall_state_t {
 
 static std::unordered_map<pid_t, child_syscall_state_t> children_syscall_state;
 
+#ifndef _PTRACETRICKS_NO_LLVM
+
 #if defined(__x86_64__) || defined(__aarch64__) || defined(__mips64)
 typedef typename obj::ELF64LE ELFT;
 #elif defined(__i386__) || defined(__mips__) || defined(__arm__)
@@ -275,8 +298,10 @@ typedef typename obj::ELFFile<ELFT> ELFF;
 typedef std::tuple<llvm::MCDisassembler &, const llvm::MCSubtargetInfo &,
                    llvm::MCInstPrinter &>
     disas_t;
+#endif
 
 int ParentProc(pid_t child) {
+#ifndef _PTRACETRICKS_NO_LLVM
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetDisassembler();
 
@@ -388,6 +413,8 @@ int ParentProc(pid_t child) {
 
     return res;
   };
+
+#endif /* _PTRACETRICKS_NO_LLVM */
 
   //
   // select ptrace options
@@ -670,6 +697,7 @@ int ParentProc(pid_t child) {
 
               cout << endl;
 
+#ifndef _PTRACETRICKS_NO_LLVM
               //
               // disassemble the instruction
               //
@@ -703,6 +731,7 @@ int ParentProc(pid_t child) {
                   }
                 }
               }
+#endif /* _PTRACETRICKS_NO_LLVM */
             }
           }
 
