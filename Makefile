@@ -35,10 +35,13 @@ LDFLAGS += -latomic
 
 VER := $(shell git log -n1 --format="%h")
 
+ptracetricks.stripped: ptracetricks
+	strip -o $@ $<
+
 ptracetricks: ptracetricks.cpp
 	@echo CXX $@
 	$(LLVM_CLANGXX) -o $@ $(CXXFLAGS) -D PTRACETRICKS_VERSION=\"$(VER)\" $< -static -fPIC $(LDFLAGS)
 
 .PHONY: clean
 clean:
-	rm -f ptracetricks
+	rm -f ptracetricks ptracetricks.stripped
