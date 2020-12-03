@@ -117,7 +117,7 @@ static unsigned PID;
 namespace ptracetricks {
 
 static int ChildProc(void);
-static int ParentProc(pid_t child);
+static int TracerLoop(pid_t child);
 
 static bool SeenExec = false;
 
@@ -259,8 +259,19 @@ int main(int argc, char **argv) {
       return 1;
     }
 
+    //
+    // since PTRACE_ATTACH succeeded, we know the tracee was sent a SIGSTOP.
+    // wait on it.
+    //
+    {
+      int status;
+      do
+        waitpid(-1, &status, __WALL);
+      while (!WIFSTOPPED(status));
+    }
+
     ptracetricks::SeenExec = true; /* XXX */
-    return ptracetricks::ParentProc(child);
+    return ptracetricks::TracerLoop(child);
   } else {
     //
     // mode 2: exec
@@ -290,7 +301,7 @@ int main(int argc, char **argv) {
 
     ptracetricks::IgnoreCtrlC(); /* XXX */
 
-    return ptracetricks::ParentProc(child);
+    return ptracetricks::TracerLoop(child);
   }
 }
 
@@ -364,7 +375,7 @@ typedef std::tuple<llvm::MCDisassembler &, const llvm::MCSubtargetInfo &,
     disas_t;
 #endif
 
-int ParentProc(pid_t child) {
+int TracerLoop(pid_t child) {
 #ifndef _PTRACETRICKS_NO_LLVM
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetDisassembler();
@@ -495,25 +506,8 @@ int ParentProc(pid_t child) {
   // set those options
   //
   if (ptrace(PTRACE_SETOPTIONS, child, 0, ptrace_options) < 0) {
-    int err = errno;
-
-    if (err == ESRCH) {
-      int status;
-      child = waitpid(-1, &status, __WALL);
-
-      if (child < 0) {
-        cerr << "waitpid failed (" << strerror(errno) << ')' << endl;
-        return 1;
-      } else {
-        if (ptrace(PTRACE_SETOPTIONS, child, 0, ptrace_options) < 0) {
-          cerr << "PTRACE_SETOPTIONS failed (second try): " << strerror(errno)
-               << endl;
-        }
-      }
-    } else {
-      cerr << "PTRACE_SETOPTIONS failed (" << strerror(err) << ')'
-           << endl;
-    }
+    cerr << "PTRACE_SETOPTIONS failed (" << strerror(errno) << ')' << endl;
+    return 1;
   }
 
   siginfo_t si;
