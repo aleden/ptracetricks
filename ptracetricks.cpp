@@ -1,5 +1,3 @@
-#define _PTRACETRICKS_NO_LLVM
-
 #include <filesystem>
 #include <iostream>
 #include <cstring>
@@ -568,42 +566,6 @@ int TracerLoop(pid_t child) {
                 cout << std::dec << ret;
 
               cout << endl;
-
-#ifndef _PTRACETRICKS_NO_LLVM
-              //
-              // disassemble the instruction
-              //
-              {
-                unsigned long insn_data = _ptrace_peekdata(child, pc);
-
-                std::vector<uint8_t> insn_bytes;
-                insn_bytes.resize(sizeof(insn_data));
-
-                __builtin_memcpy(&insn_bytes[0], &insn_data, sizeof(insn_data));
-
-                llvm::MCInst Inst;
-
-                std::string errmsg;
-                bool Disassembled;
-                uint64_t InstLen = 0;
-                {
-                  llvm::raw_string_ostream ErrorStrStream(errmsg);
-
-                  Disassembled = DisAsm->getInstruction(
-                      Inst, InstLen, insn_bytes, pc, ErrorStrStream);
-
-                  if (Disassembled) {
-                    //
-                    // print the instruction
-                    //
-                    cout << StringOfMCInst(Inst) << std::endl;
-                  } else {
-                    cerr << "failed to disassemble @ 0x" << std::hex << pc
-                         << std::endl;
-                  }
-                }
-              }
-#endif /* _PTRACETRICKS_NO_LLVM */
             }
           }
 
@@ -861,6 +823,8 @@ void arch_put_breakpoint(void *code) {
   reinterpret_cast<uint8_t *>(code)[0] = 0xcc; /* int3 */
 #elif defined(__aarch64__)
   reinterpret_cast<uint32_t *>(code)[0] = 0xd4200000; /* brk */
+#elif defined(__arm__)
+  reinterpret_cast<uint32_t *>(code)[0] = 0xe7ffdefe;
 #elif defined(__mips64) || defined(__mips__)
   reinterpret_cast<uint32_t *>(code)[0] = 0x0000000d; /* break */
 #else
