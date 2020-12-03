@@ -20,31 +20,7 @@
 #include <sys/uio.h>
 #include <boost/format.hpp>
 #include <unordered_map>
-
-#ifndef _PTRACETRICKS_NO_LLVM
-
-#include <llvm/Support/InitLLVM.h>
-#include <llvm/Support/CommandLine.h>
-#include <llvm/Support/TargetRegistry.h>
-#include <llvm/Support/TargetSelect.h>
-#include <llvm/Object/Binary.h>
-#include <llvm/Object/ELFObjectFile.h>
-#include <llvm/MC/SubtargetFeature.h>
-#include <llvm/MC/MCTargetOptions.h>
-#include <llvm/MC/MCObjectFileInfo.h>
-#include <llvm/MC/MCAsmInfo.h>
-#include <llvm/MC/MCContext.h>
-#include <llvm/MC/MCDisassembler/MCDisassembler.h>
-#include <llvm/MC/MCInstPrinter.h>
-#include <llvm/MC/MCInstrInfo.h>
-//#include <llvm/Support/WithColor.h>
-
-namespace obj = llvm::object;
-namespace cl = llvm::cl;
-
-#else
 #include <getopt.h>
-#endif
 
 #ifndef likely
 #define likely(x)   __builtin_expect(!!(x), 1)
@@ -61,56 +37,12 @@ using namespace std;
 
 namespace opts {
 
-#ifndef _PTRACETRICKS_NO_LLVM
-static cl::OptionCategory PtraceTricksCategory("Specific Options");
-
-static cl::opt<std::string> Prog(cl::Positional, cl::desc("prog"), cl::Optional,
-                                 cl::value_desc("filename"),
-                                 cl::cat(PtraceTricksCategory));
-
-static cl::list<std::string> Args("args", cl::CommaSeparated,
-                                  cl::value_desc("arg_1,arg_2,...,arg_n"),
-                                  cl::desc("Program arguments"),
-                                  cl::cat(PtraceTricksCategory));
-
-static cl::opt<unsigned> PID("attach", cl::value_desc("pid"),
-                             cl::desc("Attach to existing process"),
-                             cl::cat(PtraceTricksCategory));
-
-static cl::alias PIDAlias("p", cl::desc("Alias for -attach."),
-                          cl::aliasopt(PID), cl::cat(PtraceTricksCategory));
-
-static cl::list<std::string>
-    Envs("env", cl::CommaSeparated,
-         cl::value_desc("KEY_1=VALUE_1,KEY_2=VALUE_2,...,KEY_n=VALUE_n"),
-         cl::desc("Extra environment variables"),
-         cl::cat(PtraceTricksCategory));
-
-static cl::opt<bool>
-    Verbose("verbose",
-            cl::desc("Print extra information for debugging purposes"),
-            cl::cat(PtraceTricksCategory));
-
-static cl::alias VerboseAlias("v", cl::desc("Alias for -verbose."),
-                              cl::aliasopt(Verbose),
-                              cl::cat(PtraceTricksCategory));
-
-static cl::opt<bool> Syscalls("syscalls", cl::desc("Always trace system calls"),
-                              cl::cat(PtraceTricksCategory));
-
-static cl::alias SyscallsAlias("s", cl::desc("Alias for -syscalls."),
-                               cl::aliasopt(Syscalls),
-                               cl::cat(PtraceTricksCategory));
-#else
-
 static std::string Prog;
 static std::vector<std::string> Args;
 static std::vector<std::string> Envs;
 static bool Verbose;
 static bool Syscalls;
 static unsigned PID;
-
-#endif /* _PTRACETRICKS_NO_LLVM */
 
 } // namespace opts
 
@@ -194,12 +126,6 @@ int main(int argc, char **argv) {
     }
   }
 
-#ifndef _PTRACETRICKS_NO_LLVM
-  llvm::InitLLVM X(_argc, _argv);
-
-  cl::HideUnrelatedOptions({&opts::PtraceTricksCategory /* , &llvm::ColorCategory */});
-  cl::ParseCommandLineOptions(_argc, _argv, "stupid ptrace tricks\n");
-#else
   static struct option const longopts[] =
   {
     {"syscalls", no_argument,       NULL, 's'},
@@ -238,7 +164,6 @@ int main(int argc, char **argv) {
       break;
     }
   }
-#endif
 
   /* Line buffer stdout to ensure lines are written atomically and immediately
      so that processes running in parallel do not intersperse their output.  */
@@ -357,140 +282,7 @@ struct child_syscall_state_t {
 
 static std::unordered_map<pid_t, child_syscall_state_t> children_syscall_state;
 
-#ifndef _PTRACETRICKS_NO_LLVM
-
-#if defined(__x86_64__) || defined(__aarch64__) || defined(__mips64)
-typedef typename obj::ELF64LE ELFT;
-#elif defined(__i386__) || defined(__mips__) || defined(__arm__)
-typedef typename obj::ELF32LE ELFT;
-#else
-#error
-#endif
-
-typedef typename obj::ELFObjectFile<ELFT> ELFO;
-typedef typename obj::ELFFile<ELFT> ELFF;
-
-typedef std::tuple<llvm::MCDisassembler &, const llvm::MCSubtargetInfo &,
-                   llvm::MCInstPrinter &>
-    disas_t;
-#endif
-
 int TracerLoop(pid_t child) {
-#ifndef _PTRACETRICKS_NO_LLVM
-  llvm::InitializeNativeTarget();
-  llvm::InitializeNativeTargetDisassembler();
-
-  llvm::Triple TheTriple;
-  llvm::SubtargetFeatures Features;
-
-  {
-    llvm::Expected<obj::OwningBinary<obj::Binary>> BinaryOrErr =
-        obj::createBinary("/proc/self/exe");
-    if (!BinaryOrErr) {
-      fprintf(stderr, "failed to open /proc/self/exe\n");
-      return 1;
-    }
-
-    obj::Binary *B = BinaryOrErr.get().getBinary();
-
-    if (!llvm::isa<ELFO>(B)) {
-      fprintf(stderr, "invalid arch\n");
-      return 1;
-    }
-
-    const ELFO &O = *llvm::cast<ELFO>(B);
-
-    TheTriple = O.makeTriple();
-    Features = O.getFeatures();
-  }
-
-  //
-  // initialize the LLVM objects necessary for disassembling instructions
-  //
-  std::string ArchName;
-  std::string Error;
-
-  const llvm::Target *TheTarget =
-      llvm::TargetRegistry::lookupTarget(ArchName, TheTriple, Error);
-  if (!TheTarget) {
-    cerr << "failed to lookup target: " << Error << '\n';
-    return 1;
-  }
-
-  std::string TripleName = TheTriple.getTriple();
-  std::string MCPU;
-
-  std::unique_ptr<const llvm::MCRegisterInfo> MRI(
-      TheTarget->createMCRegInfo(TripleName));
-  if (!MRI) {
-    cerr << "no register info for target\n";
-    return 1;
-  }
-
-  llvm::MCTargetOptions Options;
-  std::unique_ptr<const llvm::MCAsmInfo> AsmInfo(
-      TheTarget->createMCAsmInfo(*MRI, TripleName, Options));
-  if (!AsmInfo) {
-    cerr << "no assembly info\n";
-    return 1;
-  }
-
-  std::unique_ptr<const llvm::MCSubtargetInfo> STI(
-      TheTarget->createMCSubtargetInfo(TripleName, MCPU, Features.getString()));
-  if (!STI) {
-    cerr << "no subtarget info\n";
-    return 1;
-  }
-
-  std::unique_ptr<const llvm::MCInstrInfo> MII(TheTarget->createMCInstrInfo());
-  if (!MII) {
-    cerr << "no instruction info\n";
-    return 1;
-  }
-
-  llvm::MCObjectFileInfo MOFI;
-  llvm::MCContext Ctx(AsmInfo.get(), MRI.get(), &MOFI);
-  // FIXME: for now initialize MCObjectFileInfo with default values
-  MOFI.InitMCObjectFileInfo(llvm::Triple(TripleName), false, Ctx);
-
-  std::unique_ptr<llvm::MCDisassembler> DisAsm(
-      TheTarget->createMCDisassembler(*STI, Ctx));
-  if (!DisAsm) {
-    cerr << "no disassembler for target\n";
-    return 1;
-  }
-
-#if defined(__x86_64__) || defined(__i386__)
-  int AsmPrinterVariant = 1; // Intel syntax
-#else
-  int AsmPrinterVariant = AsmInfo->getAssemblerDialect();
-#endif
-  std::unique_ptr<llvm::MCInstPrinter> IP(TheTarget->createMCInstPrinter(
-      llvm::Triple(TripleName), AsmPrinterVariant, *AsmInfo, *MII, *MRI));
-  if (!IP) {
-    cerr << "no instruction printer\n";
-    return 1;
-  }
-
-  //disas_t dis(*DisAsm, std::cref(*STI), *IP);
-
-  auto StringOfMCInst = [&](llvm::MCInst &Inst) -> std::string {
-    std::string res;
-
-    {
-      llvm::raw_string_ostream ss(res);
-
-      IP->printInst(&Inst, 0x0 /* XXX */, "", *STI, ss);
-
-      if (opts::Verbose)
-        ss << '\n' << Inst << '\n';
-    }
-
-    return res;
-  };
-
-#endif /* _PTRACETRICKS_NO_LLVM */
-
   //
   // select ptrace options
   //
