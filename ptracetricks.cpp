@@ -1072,8 +1072,7 @@ void arch_put_breakpoint(void *code) {
 #elif defined(__mips64) || defined(__mips__)
   reinterpret_cast<uint32_t *>(code)[0] = 0x0000000d; /* break */
 #else
-// TODO XXX
-//#error
+#error
 #endif
 }
 
