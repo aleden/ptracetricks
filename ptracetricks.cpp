@@ -503,6 +503,7 @@ int ParentProc(pid_t child) {
 
       if (child < 0) {
         cerr << "waitpid failed (" << strerror(errno) << ')' << endl;
+        return 1;
       } else {
         if (ptrace(PTRACE_SETOPTIONS, child, 0, ptrace_options) < 0) {
           cerr << "PTRACE_SETOPTIONS failed (second try): " << strerror(errno)
