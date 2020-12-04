@@ -17,6 +17,7 @@
 #include <asm/unistd.h>
 #include <sys/uio.h>
 #include <boost/format.hpp>
+#include <boost/dynamic_bitset.hpp>
 #include <unordered_map>
 #include <getopt.h>
 
@@ -41,6 +42,7 @@ static std::vector<std::string> Envs;
 static bool Verbose;
 static bool Syscalls;
 static unsigned PID;
+static std::vector<std::string> Breakpoints;
 
 } // namespace opts
 
@@ -126,10 +128,11 @@ int main(int argc, char **argv) {
 
   static struct option const longopts[] =
   {
-    {"syscalls", no_argument,       NULL, 's'},
-    {"attach",   required_argument, NULL, 'p'},
-    {"help",     no_argument,       NULL, 'h'},
-    {"version",  no_argument,       NULL, 'v'},
+    {"syscalls",   no_argument,       NULL, 's'},
+    {"attach",     required_argument, NULL, 'p'},
+    {"breakpoint", required_argument, NULL, 'b'},
+    {"help",       no_argument,       NULL, 'h'},
+    {"version",    no_argument,       NULL, 'v'},
     {NULL, 0, NULL, 0}
   };
 
@@ -144,6 +147,11 @@ int main(int argc, char **argv) {
       assert(optarg);
       opts::PID = atoi(optarg);
       assert(opts::PID);
+      break;
+
+    case 'b':
+      assert(optarg);
+      opts::Breakpoints.push_back(optarg);
       break;
 
     case 'v':
@@ -281,6 +289,9 @@ struct child_syscall_state_t {
 static std::unordered_map<pid_t, child_syscall_state_t> children_syscall_state;
 
 int TracerLoop(pid_t child) {
+  boost::dynamic_bitset<> BreakpointsPlanted;
+  BreakpointsPlanted.resize(opts::Breakpoints.size());
+
   //
   // select ptrace options
   //
@@ -306,10 +317,11 @@ int TracerLoop(pid_t child) {
   try {
     for (;;) {
       if (likely(!(child < 0))) {
-        if (unlikely(ptrace(SeenExec && opts::Syscalls
-                                ? PTRACE_SYSCALL
-                                : PTRACE_CONT,
-                            child, nullptr, reinterpret_cast<void *>(sig)) < 0))
+        if (unlikely(
+                ptrace(SeenExec && (opts::Syscalls || !BreakpointsPlanted.all())
+                           ? PTRACE_SYSCALL
+                           : PTRACE_CONT,
+                       child, nullptr, reinterpret_cast<void *>(sig)) < 0))
           cerr << "failed to resume tracee : " << strerror(errno) << '\n';
       }
 
@@ -479,15 +491,13 @@ int TracerLoop(pid_t child) {
             auto &a6 = syscall_state.a6;
             auto &no = syscall_state.no;
 
-            if (no >= 0 &&
-                no < syscalls::NR_MAX &&
-                syscall_names[no]) {
+            auto print_syscall = [&](std::ostream &out) -> void {
               const char *const nm = syscall_names[no];
 
               //
               // print syscall
               //
-              cout << nm << '(';
+              out << nm << '(';
 
               //
               // print arguments
@@ -495,48 +505,48 @@ int TracerLoop(pid_t child) {
               try {
                 switch (no) {
                 case syscalls::NR::openat:
-                  cout << dec << a1 << ", \"" << _ptrace_read_string(child, a2) << '\"';
+                  out << dec << a1 << ", \"" << _ptrace_read_string(child, a2) << '\"';
                   break;
                 case syscalls::NR::access:
-                  cout << '\"' << _ptrace_read_string(child, a1) << "\", " << std::dec << a2;
+                  out << '\"' << _ptrace_read_string(child, a1) << "\", " << std::dec << a2;
                   break;
                 case syscalls::NR::close:
-                  cout << std::dec << a1;
+                  out << std::dec << a1;
                   break;
                 case syscalls::NR::exit_group:
-                  cout << std::dec << a1;
+                  out << std::dec << a1;
                   break;
                 case syscalls::NR::fstat64:
-                  cout << std::dec << a1 << ", " << "0x" << std::hex << a2;
+                  out << std::dec << a1 << ", " << "0x" << std::hex << a2;
                   break;
                 case syscalls::NR::stat64:
-                  cout << '\"' << _ptrace_read_string(child, a1) << "\", 0x" << std::hex << a2;
+                  out << '\"' << _ptrace_read_string(child, a1) << "\", 0x" << std::hex << a2;
                   break;
                 case syscalls::NR::clock_settime:
                 case syscalls::NR::clock_gettime:
-                  cout << std::dec << a1 << ", " << "0x" << std::hex << a2;
+                  out << std::dec << a1 << ", " << "0x" << std::hex << a2;
                   break;
                 case syscalls::NR::recv:
                 case syscalls::NR::readv:
                 case syscalls::NR::read:
                 case syscalls::NR::writev:
                 case syscalls::NR::write:
-                  cout << std::dec << a1 << ", 0x" << std::hex << a2 << ", " << std::dec << a3;
+                  out << std::dec << a1 << ", 0x" << std::hex << a2 << ", " << std::dec << a3;
                   break;
                 case syscalls::NR::brk:
-                  cout << "0x" << std::hex << a1;
+                  out << "0x" << std::hex << a1;
                   break;
                 case syscalls::NR::mprotect:
-                  cout << "0x" << std::hex << a1 << ", " << std::dec << a2 << ", " << a3;
+                  out << "0x" << std::hex << a1 << ", " << std::dec << a2 << ", " << a3;
                   break;
                 case syscalls::NR::mmap2:
-                  cout << "0x" << std::hex << a1 << ", " << std::dec << a2 << ", " << a3 << ", " << a4 << ", " << a5 << ", " << a6;
+                  out << "0x" << std::hex << a1 << ", " << std::dec << a2 << ", " << a3 << ", " << a4 << ", " << a5 << ", " << a6;
                   break;
                 case syscalls::NR::munmap:
-                  cout << "0x" << std::hex << a1 << ", " << std::dec << a2;
+                  out << "0x" << std::hex << a1 << ", " << std::dec << a2;
                   break;
                 case syscalls::NR::prctl:
-                  cout << std::dec
+                  out << std::dec
                        << a1 << ", "
                        << a2 << ", "
                        << a3 << ", "
@@ -558,15 +568,18 @@ int TracerLoop(pid_t child) {
                 break;
               }
 
-              cout << ") = ";
+              out << ") = ";
 
               if (IsRetPointer)
-                cout << "0x" << std::hex << ret;
+                out << "0x" << std::hex << ret;
               else
-                cout << std::dec << ret;
+                out << std::dec << ret;
 
-              cout << endl;
-            }
+              out << '\n';
+            };
+
+            if (no >= 0 && no < syscalls::NR_MAX && syscall_names[no])
+              print_syscall(std::cout);
           }
 
           dir ^= 1;
