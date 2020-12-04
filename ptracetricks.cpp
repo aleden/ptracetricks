@@ -50,7 +50,9 @@ namespace ptracetricks {
 
 typedef std::pair<std::string, uintptr_t> breakpoint_t;
 
+static std::unordered_map<uintptr_t, unsigned> BreakpointPCMap;
 static std::vector<breakpoint_t> Breakpoints;
+static std::vector<long> BreakpointsInsnWord;
 
 static int ChildProc(void);
 static int TracerLoop(pid_t child);
@@ -133,15 +135,16 @@ int main(int argc, char **argv) {
   static struct option const longopts[] =
   {
     {"syscalls",   no_argument,       NULL, 's'},
+    {"verbose",    no_argument,       NULL, 'v'},
     {"attach",     required_argument, NULL, 'p'},
     {"breakpoint", required_argument, NULL, 'b'},
     {"help",       no_argument,       NULL, 'h'},
-    {"version",    no_argument,       NULL, 'v'},
+    {"version",    no_argument,       NULL, 'V'},
     {NULL, 0, NULL, 0}
   };
 
   int optc;
-  while ((optc = getopt_long(_argc, _argv, "shvp:", longopts, NULL)) != -1) {
+  while ((optc = getopt_long(_argc, _argv, "shvVp:", longopts, NULL)) != -1) {
     switch (optc) {
     case 's':
       opts::Syscalls = true;
@@ -159,6 +162,10 @@ int main(int argc, char **argv) {
       break;
 
     case 'v':
+      opts::Verbose = true;
+      break;
+
+    case 'V':
       ptracetricks::version();
 
     case 'h':
@@ -211,6 +218,8 @@ int main(int argc, char **argv) {
 
     ptracetricks::Breakpoints.emplace_back(L, rva);
   }
+
+  ptracetricks::BreakpointsInsnWord.resize(ptracetricks::Breakpoints.size());
 
   /* Line buffer stdout to ensure lines are written atomically and immediately
      so that processes running in parallel do not intersperse their output.  */
@@ -329,6 +338,14 @@ struct child_syscall_state_t {
 
 static std::unordered_map<pid_t, child_syscall_state_t> children_syscall_state;
 
+static void
+PlantBreakpoint(unsigned Idx, pid_t,
+                const std::unordered_map<std::string, uintptr_t> &vmm);
+static bool virtual_memory_mappings_for_process(
+    pid_t child, std::unordered_map<std::string, uintptr_t> &out);
+
+static void on_breakpoint(unsigned Idx, pid_t, const user_regs_struct &regs);
+
 int TracerLoop(pid_t child) {
   boost::dynamic_bitset<> BreakpointsPlanted;
   BreakpointsPlanted.resize(Breakpoints.size());
@@ -383,6 +400,32 @@ int TracerLoop(pid_t child) {
       }
 
       if (likely(WIFSTOPPED(status))) {
+        //
+        // if we need to plant breakpoints, this is an opprtunity to do so
+        //
+        if (!BreakpointsPlanted.all()) {
+          //
+          // parse /proc/<child>/maps
+          //
+          std::unordered_map<std::string, uintptr_t> vmm;
+          if (virtual_memory_mappings_for_process(child, vmm)) {
+            for (unsigned i = 0; i < BreakpointsPlanted.size(); ++i) {
+              if (BreakpointsPlanted.test(i))
+                continue;
+
+              try {
+                PlantBreakpoint(i, child, vmm);
+
+                BreakpointsPlanted.set(i);
+              } catch (const std::exception &ex) {
+                if (opts::Verbose)
+                  std::cerr << "failed to plant breakpoint: " << ex.what()
+                            << '\n';
+              }
+            }
+          }
+        }
+
         //
         // the following kinds of ptrace-stops exist:
         //
@@ -671,7 +714,46 @@ int TracerLoop(pid_t child) {
               break;
             }
           } else {
-            //on_breakpoint(child, tcg, dis);
+            //
+            // we hit a breakpoint?
+            //
+            user_regs_struct gpr;
+            _ptrace_get_gpr(child, gpr);
+
+            auto &pc =
+#if defined(__x86_64__)
+                gpr.rip
+#elif defined(__i386__)
+                gpr.eip
+#elif defined(__aarch64__)
+                gpr.pc
+#elif defined(__arm__)
+                gpr.uregs[15]
+#elif defined(__mips64) || defined(__mips__)
+                gpr.cp0_epc
+#else
+#error
+#endif
+                ;
+
+            auto it = BreakpointPCMap.find(pc);
+            if (it == BreakpointPCMap.end()) {
+              std::cerr << "warning: unknown breakpoint @ " << std::hex << pc
+                        << std::endl;
+            } else {
+              unsigned Idx = (*it).second;
+
+              if (opts::Verbose)
+                std::cerr << "on_breakpoint @ " << std::hex << pc << std::endl;
+
+              on_breakpoint(Idx, child, gpr);
+
+              //
+              // restore instruction word
+              //
+              long insnword = BreakpointsInsnWord.at(Idx);
+              _ptrace_pokedata(child, pc, insnword);
+            }
           }
         } else if (ptrace(PTRACE_GETSIGINFO, child, 0, &si) < 0) {
           //
@@ -709,6 +791,124 @@ int TracerLoop(pid_t child) {
 
   return 0;
 }
+
+static void print_register_state(std::ostream &out,
+                                 const user_regs_struct &regs);
+
+void on_breakpoint(unsigned Idx, pid_t, const user_regs_struct &regs) {
+  print_register_state(std::cout, regs);
+}
+
+void print_register_state(std::ostream &out,
+                          const user_regs_struct &regs) {
+  auto &pc =
+#if defined(__x86_64__)
+      regs.rip
+#elif defined(__i386__)
+      regs.eip
+#elif defined(__aarch64__)
+      regs.pc
+#elif defined(__arm__)
+      regs.uregs[15]
+#elif defined(__mips64) || defined(__mips__)
+      regs.cp0_epc
+#else
+#error
+#endif
+      ;
+
+  out << "IP 0x" << std::hex << pc << '\n';
+
+#if defined(__arm__)
+  out << std::hex << regs.uregs[0] << '\n';
+  out << std::hex << regs.uregs[1] << '\n';
+  out << std::hex << regs.uregs[2] << '\n';
+  out << std::hex << regs.uregs[3] << '\n';
+  out << std::hex << regs.uregs[4] << '\n';
+  out << std::hex << regs.uregs[5] << '\n';
+#endif
+}
+
+bool virtual_memory_mappings_for_process(pid_t child,
+                                         std::unordered_map<std::string, uintptr_t> &out) {
+  FILE *fp = nullptr;
+  char *line = nullptr;
+
+  {
+    char path[64];
+    snprintf(path, sizeof(path), "/proc/%d/maps", static_cast<int>(child));
+
+    fp = fopen(path, "r");
+  }
+
+  if (!fp)
+    return false;
+
+  out.clear();
+
+  size_t len = 0;
+  ssize_t read;
+
+  while ((read = getline(&line, &len, fp)) != -1) {
+    int fields, dev_maj, dev_min, inode;
+    uint64_t min, max, offset;
+    char flag_r, flag_w, flag_x, flag_p;
+    char path[512] = "";
+    fields = sscanf(line,
+                    "%" PRIx64 "-%" PRIx64 " %c%c%c%c %" PRIx64 " %x:%x %d"
+                    " %512s",
+                    &min, &max, &flag_r, &flag_w, &flag_x, &flag_p, &offset,
+                    &dev_maj, &dev_min, &inode, path);
+
+    if ((fields < 10) || (fields > 11)) {
+      continue;
+    }
+
+    bool r = flag_r == 'r';
+    bool w = flag_w == 'w';
+    bool x = flag_x == 'x';
+    bool p = flag_p == 'p';
+
+    out[path] = min + offset;
+  }
+
+  free(line);
+  fclose(fp);
+
+  return true;
+}
+
+static void arch_put_breakpoint(void *code);
+
+void PlantBreakpoint(unsigned Idx,
+                     pid_t child,
+                     const std::unordered_map<std::string, uintptr_t> &vmm) {
+  std::string dso;
+  uintptr_t   rva;
+  std::tie(dso, rva) = Breakpoints.at(Idx);
+
+  //
+  // parse /proc/<child>/maps
+  //
+  auto it = vmm.find(dso);
+  if (it == vmm.end()) {
+    throw std::runtime_error(
+        std::string("PlantBreakpoint failed : could not find vmm for \"") +
+        dso + std::string("\""));
+  }
+
+  uintptr_t va = rva + (*it).second;
+
+  {
+    long insnword = _ptrace_peekdata(child, va);
+    BreakpointsInsnWord.at(Idx) = insnword;
+
+    arch_put_breakpoint(&insnword);
+    _ptrace_pokedata(child, va, insnword);
+  }
+
+  BreakpointPCMap[va] = Idx;
+};
 
 void _ptrace_get_gpr(pid_t child, user_regs_struct &out) {
 #if defined(__mips64) || defined(__mips__)
@@ -878,7 +1078,7 @@ void arch_put_breakpoint(void *code) {
 #elif defined(__aarch64__)
   reinterpret_cast<uint32_t *>(code)[0] = 0xd4200000; /* brk */
 #elif defined(__arm__)
-  reinterpret_cast<uint32_t *>(code)[0] = 0xe7ffdefe;
+  reinterpret_cast<uint32_t *>(code)[0] = 0xef9f0001; // 0xe7ffdefe
 #elif defined(__mips64) || defined(__mips__)
   reinterpret_cast<uint32_t *>(code)[0] = 0x0000000d; /* break */
 #else
