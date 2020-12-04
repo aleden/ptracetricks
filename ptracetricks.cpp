@@ -409,14 +409,14 @@ int TracerLoop(pid_t child) {
           //
           std::unordered_map<std::string, uintptr_t> vmm;
           if (virtual_memory_mappings_for_process(child, vmm)) {
-            for (unsigned i = 0; i < BreakpointsPlanted.size(); ++i) {
-              if (BreakpointsPlanted.test(i))
+            for (unsigned Idx = 0; Idx < BreakpointsPlanted.size(); ++Idx) {
+              if (BreakpointsPlanted.test(Idx))
                 continue;
 
               try {
-                PlantBreakpoint(i, child, vmm);
+                PlantBreakpoint(Idx, child, vmm);
 
-                BreakpointsPlanted.set(i);
+                BreakpointsPlanted.set(Idx);
               } catch (const std::exception &ex) {
                 if (opts::Verbose)
                   std::cerr << "failed to plant breakpoint: " << ex.what()
