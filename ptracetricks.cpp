@@ -403,7 +403,7 @@ int TracerLoop(pid_t child) {
         //
         // if we need to plant breakpoints, this is an opprtunity to do so
         //
-        if (!BreakpointsPlanted.all()) {
+        if (SeenExec && !BreakpointsPlanted.all()) {
           //
           // parse /proc/<child>/maps
           //
