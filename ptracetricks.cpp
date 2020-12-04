@@ -662,7 +662,10 @@ int TracerLoop(pid_t child) {
               out << '\n';
             };
 
-            if (no >= 0 && no < syscalls::NR_MAX && syscall_names[no])
+            if (opts::Syscalls &&
+                no >= 0 &&
+                no < syscalls::NR_MAX &&
+                syscall_names[no])
               print_syscall(std::cout);
           }
 
