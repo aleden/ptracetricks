@@ -724,7 +724,7 @@ int TracerLoop(pid_t child) {
             user_regs_struct gpr;
             _ptrace_get_gpr(child, gpr);
 
-            auto &pc =
+            long pc =
 #if defined(__x86_64__)
                 gpr.rip
 #elif defined(__i386__)
