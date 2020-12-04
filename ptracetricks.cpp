@@ -453,7 +453,7 @@ int TracerLoop(pid_t child) {
           user_regs_struct gpr;
           _ptrace_get_gpr(child, gpr);
 
-          auto &pc =
+          long pc =
 #if defined(__x86_64__)
               gpr.rip
 #elif defined(__i386__)
@@ -486,57 +486,57 @@ int TracerLoop(pid_t child) {
             // store the arguments and syscall #
             //
 #if defined(__x86_64__)
-            auto &no = gpr.orig_rax;
+            long no = gpr.orig_rax;
 
-            auto &a1 = gpr.rdi;
-            auto &a2 = gpr.rsi;
-            auto &a3 = gpr.rdx;
-            auto &a4 = gpr.r10;
-            auto &a5 = gpr.r8;
-            auto &a6 = gpr.r9;
+            long a1 = gpr.rdi;
+            long a2 = gpr.rsi;
+            long a3 = gpr.rdx;
+            long a4 = gpr.r10;
+            long a5 = gpr.r8;
+            long a6 = gpr.r9;
 #elif defined(__i386__)
-            auto &no = gpr.orig_eax;
+            long no = gpr.orig_eax;
 
-            auto &a1 = gpr.ebx;
-            auto &a2 = gpr.ecx;
-            auto &a3 = gpr.edx;
-            auto &a4 = gpr.esi;
-            auto &a5 = gpr.edi;
-            auto &a6 = gpr.ebp;
+            long a1 = gpr.ebx;
+            long a2 = gpr.ecx;
+            long a3 = gpr.edx;
+            long a4 = gpr.esi;
+            long a5 = gpr.edi;
+            long a6 = gpr.ebp;
 #elif defined(__aarch64__)
-            auto &no = gpr.regs[8];
+            long no = gpr.regs[8];
 
-            auto &a1 = gpr.regs[0];
-            auto &a2 = gpr.regs[1];
-            auto &a3 = gpr.regs[2];
-            auto &a4 = gpr.regs[3];
-            auto &a5 = gpr.regs[4];
-            auto &a6 = gpr.regs[5];
+            long a1 = gpr.regs[0];
+            long a2 = gpr.regs[1];
+            long a3 = gpr.regs[2];
+            long a4 = gpr.regs[3];
+            long a5 = gpr.regs[4];
+            long a6 = gpr.regs[5];
 #elif defined(__arm__)
-            auto &no = gpr.uregs[7];
+            long no = gpr.uregs[7];
 
-            auto &a1 = gpr.uregs[0];
-            auto &a2 = gpr.uregs[1];
-            auto &a3 = gpr.uregs[2];
-            auto &a4 = gpr.uregs[3];
-            auto &a5 = gpr.uregs[4];
-            auto &a6 = gpr.uregs[5];
+            long a1 = gpr.uregs[0];
+            long a2 = gpr.uregs[1];
+            long a3 = gpr.uregs[2];
+            long a4 = gpr.uregs[3];
+            long a5 = gpr.uregs[4];
+            long a6 = gpr.uregs[5];
 #elif defined(__mips64)
-            auto &no = gpr.regs[2];
+            long no = gpr.regs[2];
 
-            auto &a1 = gpr.regs[4];
-            auto &a2 = gpr.regs[5];
-            auto &a3 = gpr.regs[6];
-            auto &a4 = gpr.regs[7];
-            auto &a5 = gpr.regs[8];
-            auto &a6 = gpr.regs[9];
+            long a1 = gpr.regs[4];
+            long a2 = gpr.regs[5];
+            long a3 = gpr.regs[6];
+            long a4 = gpr.regs[7];
+            long a5 = gpr.regs[8];
+            long a6 = gpr.regs[9];
 #elif defined(__mips__)
-            auto &no = gpr.regs[2];
+            long no = gpr.regs[2];
 
-            auto &a1 = gpr.regs[4];
-            auto &a2 = gpr.regs[5];
-            auto &a3 = gpr.regs[6];
-            auto &a4 = gpr.regs[7];
+            long a1 = gpr.regs[4];
+            long a2 = gpr.regs[5];
+            long a3 = gpr.regs[6];
+            long a4 = gpr.regs[7];
             long a5 = _ptrace_peekdata(child, gpr.regs[29 /* sp */] + 16);
             long a6 = _ptrace_peekdata(child, gpr.regs[29 /* sp */] + 20);
 #else
@@ -567,13 +567,14 @@ int TracerLoop(pid_t child) {
 #endif
                 ;
 
-            auto &a1 = syscall_state.a1;
-            auto &a2 = syscall_state.a2;
-            auto &a3 = syscall_state.a3;
-            auto &a4 = syscall_state.a4;
-            auto &a5 = syscall_state.a5;
-            auto &a6 = syscall_state.a6;
-            auto &no = syscall_state.no;
+            long no = syscall_state.no;
+
+            long a1 = syscall_state.a1;
+            long a2 = syscall_state.a2;
+            long a3 = syscall_state.a3;
+            long a4 = syscall_state.a4;
+            long a5 = syscall_state.a5;
+            long a6 = syscall_state.a6;
 
             auto print_syscall = [&](std::ostream &out) -> void {
               const char *const nm = syscall_names[no];
