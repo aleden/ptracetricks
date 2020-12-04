@@ -42,11 +42,15 @@ static std::vector<std::string> Envs;
 static bool Verbose;
 static bool Syscalls;
 static unsigned PID;
-static std::vector<std::string> Breakpoints;
+static std::vector<const char *> Breakpoints;
 
 } // namespace opts
 
 namespace ptracetricks {
+
+typedef std::pair<std::string, uintptr_t> breakpoint_t;
+
+static std::vector<breakpoint_t> Breakpoints;
 
 static int ChildProc(void);
 static int TracerLoop(pid_t child);
@@ -171,6 +175,43 @@ int main(int argc, char **argv) {
     }
   }
 
+  //
+  // process breakpoints from command-line
+  //
+  auto is_valid_breakpoint_string = [](const std::string& s) -> bool {
+    if (s.empty())
+      return false;
+
+    if (s.find('+') == std::string::npos)
+      return false;
+
+    return true;
+  };
+
+  for (const char *bp : opts::Breakpoints) {
+    if (!is_valid_breakpoint_string(bp)) {
+      std::cerr << "warning: given breakpoint string is invalid; ignoring\n";
+      continue;
+    }
+
+    std::string s(bp);
+
+    std::string::size_type plusPos = s.find('+');
+    assert(plusPos != std::string::npos);
+
+    std::string L = s.substr(0,plusPos); /* DSO path */
+    std::string R = s.substr(plusPos+1); /* hexadecimal number */
+
+    if (!fs::exists(L)) {
+      std::cerr << "warning: given DSO in breakpoint string does not exist; ignoring\n";
+      continue;
+    }
+
+    uintptr_t rva = std::stol(R, nullptr, 0x10);
+
+    ptracetricks::Breakpoints.emplace_back(L, rva);
+  }
+
   /* Line buffer stdout to ensure lines are written atomically and immediately
      so that processes running in parallel do not intersperse their output.  */
   setvbuf(stdout, NULL, _IOLBF, 0);
@@ -290,7 +331,7 @@ static std::unordered_map<pid_t, child_syscall_state_t> children_syscall_state;
 
 int TracerLoop(pid_t child) {
   boost::dynamic_bitset<> BreakpointsPlanted;
-  BreakpointsPlanted.resize(opts::Breakpoints.size());
+  BreakpointsPlanted.resize(Breakpoints.size());
 
   //
   // select ptrace options
