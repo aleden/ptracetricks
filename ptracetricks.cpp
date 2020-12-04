@@ -770,13 +770,51 @@ int TracerLoop(pid_t child) {
           // signal-delivery-stop, recommended practice is to always pass 0 in
           // sig.
         } else {
-          //
-          // (4) signal-delivery-stop
-          //
-          cerr << "delivering signal number " << stopsig << " [" << child << "]\n";
+          user_regs_struct gpr;
+          _ptrace_get_gpr(child, gpr);
 
-          // deliver it
-          sig = stopsig;
+          long pc =
+#if defined(__x86_64__)
+              gpr.rip
+#elif defined(__i386__)
+              gpr.eip
+#elif defined(__aarch64__)
+              gpr.pc
+#elif defined(__arm__)
+              gpr.uregs[15]
+#elif defined(__mips64) || defined(__mips__)
+              gpr.cp0_epc
+#else
+#error
+#endif
+              ;
+
+          if (stopsig == SIGILL &&
+              BreakpointPCMap.count(pc)) {
+            //
+            // we hit a breakpoint
+            //
+            unsigned Idx = BreakpointPCMap[pc];
+
+            if (opts::Verbose)
+              std::cerr << "on_breakpoint @ " << std::hex << pc << std::endl;
+
+            on_breakpoint(Idx, child, gpr);
+
+            //
+            // restore instruction word
+            //
+            long insnword = BreakpointsInsnWord.at(Idx);
+            _ptrace_pokedata(child, pc, insnword);
+          } else {
+            //
+            // (4) signal-delivery-stop
+            //
+            cerr << "delivering signal number " << stopsig << " [" << child << "]\n";
+
+            // deliver it
+            sig = stopsig;
+          }
         }
       } else {
         //
@@ -1082,7 +1120,7 @@ void arch_put_breakpoint(void *code) {
 #elif defined(__aarch64__)
   reinterpret_cast<uint32_t *>(code)[0] = 0xd4200000; /* brk */
 #elif defined(__arm__)
-  reinterpret_cast<uint32_t *>(code)[0] = 0xef9f0001; // 0xe7ffdefe
+  reinterpret_cast<uint32_t *>(code)[0] = 0xe7ffdeff; /* triggers SIGILL */
 #elif defined(__mips64) || defined(__mips__)
   reinterpret_cast<uint32_t *>(code)[0] = 0x0000000d; /* break */
 #else
