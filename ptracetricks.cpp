@@ -349,7 +349,7 @@ static std::unordered_map<pid_t, child_syscall_state_t> children_syscall_state;
 static void
 PlantBreakpoint(unsigned Idx, pid_t,
                 const std::unordered_map<std::string, uintptr_t> &vmm);
-static bool virtual_memory_mappings_for_process(
+static bool executable_virtual_memory_mappings_for_process(
     pid_t child, std::unordered_map<std::string, uintptr_t> &out);
 
 static void on_breakpoint(unsigned Idx, pid_t, const cpu_state_t &);
@@ -436,7 +436,7 @@ int TracerLoop(pid_t child) {
           // parse /proc/<child>/maps
           //
           std::unordered_map<std::string, uintptr_t> vmm;
-          if (virtual_memory_mappings_for_process(child, vmm)) {
+          if (executable_virtual_memory_mappings_for_process(child, vmm)) {
             for (unsigned Idx = 0; Idx < BreakpointsPlanted.size(); ++Idx) {
               if (BreakpointsPlanted.test(Idx))
                 continue;
@@ -851,8 +851,8 @@ void dump_cpu_state(std::ostream &out, const cpu_state_t &cpu_state) {
   out << '\n';
 }
 
-bool virtual_memory_mappings_for_process(pid_t child,
-                                         std::unordered_map<std::string, uintptr_t> &out) {
+bool executable_virtual_memory_mappings_for_process(
+    pid_t child, std::unordered_map<std::string, uintptr_t> &out) {
   FILE *fp = nullptr;
   char *line = nullptr;
 
