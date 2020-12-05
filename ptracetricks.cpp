@@ -834,10 +834,10 @@ void dump_cpu_state(std::ostream &out, const cpu_state_t &cpu_state) {
     cpu_state.uregs[12], cpu_state.uregs[13], cpu_state.uregs[14], cpu_state.uregs[15]);
 #elif defined(__mips__)
   snprintf(buff, sizeof(buff),
-    "r0" " %08x " "at" " %08x " "v0" " %08x " "v1" " %08x " "a0" " %08x " "a1" " %08x " "a2" " %08x " "a3" " %08x " "\n"
-    "t0" " %08x " "t1" " %08x " "t2" " %08x " "t3" " %08x " "t4" " %08x " "t5" " %08x " "t6" " %08x " "t7" " %08x " "\n"
-    "s0" " %08x " "s1" " %08x " "s2" " %08x " "s3" " %08x " "s4" " %08x " "s5" " %08x " "s6" " %08x " "s7" " %08x " "\n"
-    "t8" " %08x " "t9" " %08x " "k0" " %08x " "k1" " %08x " "gp" " %08x " "sp" " %08x " "s8" " %08x " "ra" " %08x " "\n",
+    "r0" " %08lx " "at" " %08lx " "v0" " %08lx " "v1" " %08lx " "a0" " %08lx " "a1" " %08lx " "a2" " %08lx " "a3" " %08lx " "\n"
+    "t0" " %08lx " "t1" " %08lx " "t2" " %08lx " "t3" " %08lx " "t4" " %08lx " "t5" " %08lx " "t6" " %08lx " "t7" " %08lx " "\n"
+    "s0" " %08lx " "s1" " %08lx " "s2" " %08lx " "s3" " %08lx " "s4" " %08lx " "s5" " %08lx " "s6" " %08lx " "s7" " %08lx " "\n"
+    "t8" " %08lx " "t9" " %08lx " "k0" " %08lx " "k1" " %08lx " "gp" " %08lx " "sp" " %08lx " "s8" " %08lx " "ra" " %08lx " "\n",
 
     cpu_state.regs[0],  cpu_state.regs[1],  cpu_state.regs[2],  cpu_state.regs[3],  cpu_state.regs[4],  cpu_state.regs[5],  cpu_state.regs[6],  cpu_state.regs[7],
     cpu_state.regs[8],  cpu_state.regs[9],  cpu_state.regs[10], cpu_state.regs[11], cpu_state.regs[12], cpu_state.regs[13], cpu_state.regs[14], cpu_state.regs[15],
