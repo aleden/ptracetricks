@@ -289,11 +289,13 @@ int main(int argc, char **argv) {
 namespace ptracetricks {
 
 #if defined(__mips__) || defined(__arm__)
-typedef struct pt_regs user_regs_struct;
+typedef struct pt_regs cpu_state_t;
+#else
+typedef struct user_regs_struct cpu_state_t;
 #endif
 
-static void _ptrace_get_gpr(pid_t, user_regs_struct &out);
-static void _ptrace_set_gpr(pid_t, const user_regs_struct &in);
+static void _ptrace_get_cpu_state(pid_t, cpu_state_t &out);
+static void _ptrace_set_cpu_state(pid_t, const cpu_state_t &in);
 
 static std::string _ptrace_read_string(pid_t, uintptr_t addr);
 
@@ -344,7 +346,27 @@ PlantBreakpoint(unsigned Idx, pid_t,
 static bool virtual_memory_mappings_for_process(
     pid_t child, std::unordered_map<std::string, uintptr_t> &out);
 
-static void on_breakpoint(unsigned Idx, pid_t, const user_regs_struct &regs);
+static void on_breakpoint(unsigned Idx, pid_t, const cpu_state_t &);
+
+static long pc_of_cpu_state(const cpu_state_t &cpu_state) {
+  long pc =
+#if defined(__x86_64__)
+      cpu_state.rip
+#elif defined(__i386__)
+      cpu_state.eip
+#elif defined(__aarch64__)
+      cpu_state.pc
+#elif defined(__arm__)
+      cpu_state.uregs[15]
+#elif defined(__mips64) || defined(__mips__)
+      cpu_state.cp0_epc
+#else
+#error
+#endif
+      ;
+
+  return pc;
+}
 
 int TracerLoop(pid_t child) {
   boost::dynamic_bitset<> BreakpointsPlanted;
@@ -450,30 +472,16 @@ int TracerLoop(pid_t child) {
           //
           child_syscall_state_t &syscall_state = children_syscall_state[child];
 
-          user_regs_struct gpr;
-          _ptrace_get_gpr(child, gpr);
+          cpu_state_t cpu_state;
+          _ptrace_get_cpu_state(child, cpu_state);
 
-          long pc =
-#if defined(__x86_64__)
-              gpr.rip
-#elif defined(__i386__)
-              gpr.eip
-#elif defined(__aarch64__)
-              gpr.pc
-#elif defined(__arm__)
-              gpr.uregs[15]
-#elif defined(__mips64) || defined(__mips__)
-              gpr.cp0_epc
-#else
-#error
-#endif
-              ;
+          long pc = pc_of_cpu_state(cpu_state);
 
           //
           // determine whether this syscall is entering or has exited
           //
 #if defined(__arm__)
-          unsigned dir = gpr.uregs[12]; /* unambiguous */
+          unsigned dir = cpu_state.uregs[12]; /* unambiguous */
 #else
           unsigned dir = syscall_state.dir;
 
@@ -486,59 +494,59 @@ int TracerLoop(pid_t child) {
             // store the arguments and syscall #
             //
 #if defined(__x86_64__)
-            long no = gpr.orig_rax;
+            long no = cpu_state.orig_rax;
 
-            long a1 = gpr.rdi;
-            long a2 = gpr.rsi;
-            long a3 = gpr.rdx;
-            long a4 = gpr.r10;
-            long a5 = gpr.r8;
-            long a6 = gpr.r9;
+            long a1 = cpu_state.rdi;
+            long a2 = cpu_state.rsi;
+            long a3 = cpu_state.rdx;
+            long a4 = cpu_state.r10;
+            long a5 = cpu_state.r8;
+            long a6 = cpu_state.r9;
 #elif defined(__i386__)
-            long no = gpr.orig_eax;
+            long no = cpu_state.orig_eax;
 
-            long a1 = gpr.ebx;
-            long a2 = gpr.ecx;
-            long a3 = gpr.edx;
-            long a4 = gpr.esi;
-            long a5 = gpr.edi;
-            long a6 = gpr.ebp;
+            long a1 = cpu_state.ebx;
+            long a2 = cpu_state.ecx;
+            long a3 = cpu_state.edx;
+            long a4 = cpu_state.esi;
+            long a5 = cpu_state.edi;
+            long a6 = cpu_state.ebp;
 #elif defined(__aarch64__)
-            long no = gpr.regs[8];
+            long no = cpu_state.regs[8];
 
-            long a1 = gpr.regs[0];
-            long a2 = gpr.regs[1];
-            long a3 = gpr.regs[2];
-            long a4 = gpr.regs[3];
-            long a5 = gpr.regs[4];
-            long a6 = gpr.regs[5];
+            long a1 = cpu_state.regs[0];
+            long a2 = cpu_state.regs[1];
+            long a3 = cpu_state.regs[2];
+            long a4 = cpu_state.regs[3];
+            long a5 = cpu_state.regs[4];
+            long a6 = cpu_state.regs[5];
 #elif defined(__arm__)
-            long no = gpr.uregs[7];
+            long no = cpu_state.uregs[7];
 
-            long a1 = gpr.uregs[0];
-            long a2 = gpr.uregs[1];
-            long a3 = gpr.uregs[2];
-            long a4 = gpr.uregs[3];
-            long a5 = gpr.uregs[4];
-            long a6 = gpr.uregs[5];
+            long a1 = cpu_state.uregs[0];
+            long a2 = cpu_state.uregs[1];
+            long a3 = cpu_state.uregs[2];
+            long a4 = cpu_state.uregs[3];
+            long a5 = cpu_state.uregs[4];
+            long a6 = cpu_state.uregs[5];
 #elif defined(__mips64)
-            long no = gpr.regs[2];
+            long no = cpu_state.regs[2];
 
-            long a1 = gpr.regs[4];
-            long a2 = gpr.regs[5];
-            long a3 = gpr.regs[6];
-            long a4 = gpr.regs[7];
-            long a5 = gpr.regs[8];
-            long a6 = gpr.regs[9];
+            long a1 = cpu_state.regs[4];
+            long a2 = cpu_state.regs[5];
+            long a3 = cpu_state.regs[6];
+            long a4 = cpu_state.regs[7];
+            long a5 = cpu_state.regs[8];
+            long a6 = cpu_state.regs[9];
 #elif defined(__mips__)
-            long no = gpr.regs[2];
+            long no = cpu_state.regs[2];
 
-            long a1 = gpr.regs[4];
-            long a2 = gpr.regs[5];
-            long a3 = gpr.regs[6];
-            long a4 = gpr.regs[7];
-            long a5 = _ptrace_peekdata(child, gpr.regs[29 /* sp */] + 16);
-            long a6 = _ptrace_peekdata(child, gpr.regs[29 /* sp */] + 20);
+            long a1 = cpu_state.regs[4];
+            long a2 = cpu_state.regs[5];
+            long a3 = cpu_state.regs[6];
+            long a4 = cpu_state.regs[7];
+            long a5 = _ptrace_peekdata(child, cpu_state.regs[29 /* sp */] + 16);
+            long a6 = _ptrace_peekdata(child, cpu_state.regs[29 /* sp */] + 20);
 #else
 #error
 #endif
@@ -553,15 +561,15 @@ int TracerLoop(pid_t child) {
           } else { /* exit */
             auto &ret =
 #if defined(__x86_64__)
-                gpr.rax
+                cpu_state.rax
 #elif defined(__i386__)
-                gpr.eax
+                cpu_state.eax
 #elif defined(__aarch64__)
-                gpr.regs[0]
+                cpu_state.regs[0]
 #elif defined(__arm__)
-                gpr.uregs[0]
+                cpu_state.uregs[0]
 #elif defined(__mips64) || defined(__mips__)
-                gpr.regs[2]
+                cpu_state.regs[2]
 #else
 #error
 #endif
@@ -719,44 +727,19 @@ int TracerLoop(pid_t child) {
             }
           } else {
             //
-            // we hit a breakpoint?
+            // did we hit a breakpoint?
             //
-            user_regs_struct gpr;
-            _ptrace_get_gpr(child, gpr);
+            cpu_state_t cpu_state;
+            _ptrace_get_cpu_state(child, cpu_state);
 
-            long pc =
-#if defined(__x86_64__)
-                gpr.rip
-#elif defined(__i386__)
-                gpr.eip
-#elif defined(__aarch64__)
-                gpr.pc
-#elif defined(__arm__)
-                gpr.uregs[15]
-#elif defined(__mips64) || defined(__mips__)
-                gpr.cp0_epc
-#else
-#error
-#endif
-                ;
+            long pc = pc_of_cpu_state(cpu_state);
 
             auto it = BreakpointPCMap.find(pc);
             if (it == BreakpointPCMap.end()) {
-              std::cerr << "warning: unknown breakpoint @ " << std::hex << pc
+              std::cerr << "warning: no breakpoint @ " << std::hex << pc
                         << std::endl;
             } else {
-              unsigned Idx = (*it).second;
-
-              if (opts::Verbose)
-                std::cerr << "on_breakpoint @ " << std::hex << pc << std::endl;
-
-              on_breakpoint(Idx, child, gpr);
-
-              //
-              // restore instruction word
-              //
-              long insnword = BreakpointsInsnWord.at(Idx);
-              _ptrace_pokedata(child, pc, insnword);
+              on_breakpoint((*it).second, child, cpu_state);
             }
           }
         } else if (ptrace(PTRACE_GETSIGINFO, child, 0, &si) < 0) {
@@ -770,42 +753,14 @@ int TracerLoop(pid_t child) {
           // signal-delivery-stop, recommended practice is to always pass 0 in
           // sig.
         } else {
-          user_regs_struct gpr;
-          _ptrace_get_gpr(child, gpr);
+          cpu_state_t cpu_state;
+          _ptrace_get_cpu_state(child, cpu_state);
 
-          long pc =
-#if defined(__x86_64__)
-              gpr.rip
-#elif defined(__i386__)
-              gpr.eip
-#elif defined(__aarch64__)
-              gpr.pc
-#elif defined(__arm__)
-              gpr.uregs[15]
-#elif defined(__mips64) || defined(__mips__)
-              gpr.cp0_epc
-#else
-#error
-#endif
-              ;
+          long pc = pc_of_cpu_state(cpu_state);
 
           if (stopsig == SIGILL &&
               BreakpointPCMap.count(pc)) {
-            //
-            // we hit a breakpoint
-            //
-            unsigned Idx = BreakpointPCMap[pc];
-
-            if (opts::Verbose)
-              std::cerr << "on_breakpoint @ " << std::hex << pc << std::endl;
-
-            on_breakpoint(Idx, child, gpr);
-
-            //
-            // restore instruction word
-            //
-            long insnword = BreakpointsInsnWord.at(Idx);
-            _ptrace_pokedata(child, pc, insnword);
+            on_breakpoint(BreakpointPCMap[pc], child, cpu_state);
           } else {
             //
             // (4) signal-delivery-stop
@@ -834,41 +789,44 @@ int TracerLoop(pid_t child) {
   return 0;
 }
 
-static void print_register_state(std::ostream &out,
-                                 const user_regs_struct &regs);
+static void dump_cpu_state(std::ostream &out, const cpu_state_t &);
 
-void on_breakpoint(unsigned Idx, pid_t, const user_regs_struct &regs) {
-  print_register_state(std::cout, regs);
+void on_breakpoint(unsigned Idx, pid_t child, const cpu_state_t &cpu_state) {
+  long pc = pc_of_cpu_state(cpu_state);
+
+  if (opts::Verbose)
+    std::cerr << "on_breakpoint @ " << std::hex << pc << std::endl;
+
+  dump_cpu_state(std::cout, cpu_state);
+
+  //
+  // restore original instruction word
+  //
+  _ptrace_pokedata(child, pc, BreakpointsInsnWord.at(Idx));
 }
 
-void print_register_state(std::ostream &out,
-                          const user_regs_struct &regs) {
-  auto &pc =
-#if defined(__x86_64__)
-      regs.rip
-#elif defined(__i386__)
-      regs.eip
-#elif defined(__aarch64__)
-      regs.pc
-#elif defined(__arm__)
-      regs.uregs[15]
-#elif defined(__mips64) || defined(__mips__)
-      regs.cp0_epc
+void dump_cpu_state(std::ostream &out, const cpu_state_t &cpu_state) {
+  out << '\n';
+
+  char buff[0x1000];
+
+#if defined(__arm__)
+  snprintf(buff, sizeof(buff),
+    "R00=%08lx R01=%08lx R02=%08lx R03=%08lx" "\n"
+    "R04=%08lx R05=%08lx R06=%08lx R07=%08lx" "\n"
+    "R08=%08lx R09=%08lx R10=%08lx R11=%08lx" "\n"
+    "R12=%08lx R13=%08lx R14=%08lx R15=%08lx" "\n",
+
+    cpu_state.uregs[0],  cpu_state.uregs[1],  cpu_state.uregs[2],  cpu_state.uregs[3],
+    cpu_state.uregs[4],  cpu_state.uregs[5],  cpu_state.uregs[6],  cpu_state.uregs[7],
+    cpu_state.uregs[8],  cpu_state.uregs[9],  cpu_state.uregs[10], cpu_state.uregs[11],
+    cpu_state.uregs[12], cpu_state.uregs[13], cpu_state.uregs[14], cpu_state.uregs[15]);
 #else
 #error
 #endif
-      ;
 
-  out << "IP 0x" << std::hex << pc << '\n';
-
-#if defined(__arm__)
-  out << std::hex << regs.uregs[0] << '\n';
-  out << std::hex << regs.uregs[1] << '\n';
-  out << std::hex << regs.uregs[2] << '\n';
-  out << std::hex << regs.uregs[3] << '\n';
-  out << std::hex << regs.uregs[4] << '\n';
-  out << std::hex << regs.uregs[5] << '\n';
-#endif
+  out << buff;
+  out << '\n';
 }
 
 bool virtual_memory_mappings_for_process(pid_t child,
@@ -952,7 +910,7 @@ void PlantBreakpoint(unsigned Idx,
   BreakpointPCMap[va] = Idx;
 };
 
-void _ptrace_get_gpr(pid_t child, user_regs_struct &out) {
+void _ptrace_get_cpu_state(pid_t child, cpu_state_t &out) {
 #if defined(__mips64) || defined(__mips__)
   unsigned long _request = PTRACE_GETREGS;
   unsigned long _pid = child;
@@ -964,7 +922,7 @@ void _ptrace_get_gpr(pid_t child, user_regs_struct &out) {
                              std::string(strerror(errno)));
 #else
   struct iovec iov = {.iov_base = &out,
-                      .iov_len = sizeof(user_regs_struct)};
+                      .iov_len = sizeof(cpu_state_t)};
 
   unsigned long _request = PTRACE_GETREGSET;
   unsigned long _pid = child;
@@ -977,7 +935,7 @@ void _ptrace_get_gpr(pid_t child, user_regs_struct &out) {
 #endif
 }
 
-void _ptrace_set_gpr(pid_t child, const user_regs_struct &in) {
+void _ptrace_set_cpu_state(pid_t child, const cpu_state_t &in) {
 #if defined(__mips64) || defined(__mips__)
   unsigned long _request = PTRACE_SETREGS;
   unsigned long _pid = child;
@@ -988,8 +946,8 @@ void _ptrace_set_gpr(pid_t child, const user_regs_struct &in) {
     throw std::runtime_error(std::string("PTRACE_SETREGS failed : ") +
                              std::string(strerror(errno)));
 #else
-  struct iovec iov = {.iov_base = const_cast<user_regs_struct *>(&in),
-                      .iov_len = sizeof(user_regs_struct)};
+  struct iovec iov = {.iov_base = const_cast<cpu_state_t *>(&in),
+                      .iov_len = sizeof(cpu_state_t)};
 
   unsigned long _request = PTRACE_SETREGSET;
   unsigned long _pid = child;
