@@ -85,7 +85,8 @@ static _NORET void usage() {
           "  --version (-V)\n"
           "  --verbose (-v)\n"
           "  --syscalls (-s)\n"
-          "  --breakpoint (-b) /path/to/dso+RVA\n";
+          "  --breakpoint (-b) /path/to/dso+RVA\n"
+          "  --attach (-p) PID\n";
   exit(0);
 }
 
