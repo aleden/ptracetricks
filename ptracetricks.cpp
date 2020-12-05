@@ -80,7 +80,12 @@ static _NORET void usage() {
           "or\n"
           "ptracetricks [OPTIONS] --attach PID\n"
           "\n"
-          "currently the only option is --syscalls (-s)\n";
+          "Options:\n"
+          "  --help (-h)\n"
+          "  --version (-V)\n"
+          "  --verbose (-v)\n"
+          "  --syscalls (-s)\n"
+          "  --breakpoint (-b) /path/to/dso+RVA \n";
   exit(0);
 }
 
@@ -144,7 +149,7 @@ int main(int argc, char **argv) {
   };
 
   int optc;
-  while ((optc = getopt_long(_argc, _argv, "shvVp:", longopts, NULL)) != -1) {
+  while ((optc = getopt_long(_argc, _argv, "shvVb:p:", longopts, NULL)) != -1) {
     switch (optc) {
     case 's':
       opts::Syscalls = true;
