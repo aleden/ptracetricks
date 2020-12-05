@@ -833,16 +833,21 @@ void dump_cpu_state(std::ostream &out, const cpu_state_t &cpu_state) {
     cpu_state.uregs[8],  cpu_state.uregs[9],  cpu_state.uregs[10], cpu_state.uregs[11],
     cpu_state.uregs[12], cpu_state.uregs[13], cpu_state.uregs[14], cpu_state.uregs[15]);
 #elif defined(__mips__)
-  snprintf(buff, sizeof(buff),
-    "r0" " %08lx " "at" " %08lx " "v0" " %08lx " "v1" " %08lx " "a0" " %08lx " "a1" " %08lx " "a2" " %08lx " "a3" " %08lx " "\n"
-    "t0" " %08lx " "t1" " %08lx " "t2" " %08lx " "t3" " %08lx " "t4" " %08lx " "t5" " %08lx " "t6" " %08lx " "t7" " %08lx " "\n"
-    "s0" " %08lx " "s1" " %08lx " "s2" " %08lx " "s3" " %08lx " "s4" " %08lx " "s5" " %08lx " "s6" " %08lx " "s7" " %08lx " "\n"
-    "t8" " %08lx " "t9" " %08lx " "k0" " %08lx " "k1" " %08lx " "gp" " %08lx " "sp" " %08lx " "s8" " %08lx " "ra" " %08lx " "\n",
+  auto LOW32 = [](uint64_t dword) -> uint64_t {
+    constexpr uint64_t mask = 0xffffffff;
+    return dword & mask;
+  };
 
-    cpu_state.regs[0],  cpu_state.regs[1],  cpu_state.regs[2],  cpu_state.regs[3],  cpu_state.regs[4],  cpu_state.regs[5],  cpu_state.regs[6],  cpu_state.regs[7],
-    cpu_state.regs[8],  cpu_state.regs[9],  cpu_state.regs[10], cpu_state.regs[11], cpu_state.regs[12], cpu_state.regs[13], cpu_state.regs[14], cpu_state.regs[15],
-    cpu_state.regs[16], cpu_state.regs[17], cpu_state.regs[18], cpu_state.regs[19], cpu_state.regs[20], cpu_state.regs[21], cpu_state.regs[22], cpu_state.regs[23],
-    cpu_state.regs[24], cpu_state.regs[25], cpu_state.regs[26], cpu_state.regs[27], cpu_state.regs[28], cpu_state.regs[29], cpu_state.regs[30], cpu_state.regs[31]);
+  snprintf(buff, sizeof(buff),
+    "r0" " %08" PRIx64 " " "at" " %08" PRIx64 " " "v0" " %08" PRIx64 " " "v1" " %08" PRIx64 " " "a0" " %08" PRIx64 " " "a1" " %08" PRIx64 " " "a2" " %08" PRIx64 " " "a3" " %08" PRIx64 "\n"
+    "t0" " %08" PRIx64 " " "t1" " %08" PRIx64 " " "t2" " %08" PRIx64 " " "t3" " %08" PRIx64 " " "t4" " %08" PRIx64 " " "t5" " %08" PRIx64 " " "t6" " %08" PRIx64 " " "t7" " %08" PRIx64 "\n"
+    "s0" " %08" PRIx64 " " "s1" " %08" PRIx64 " " "s2" " %08" PRIx64 " " "s3" " %08" PRIx64 " " "s4" " %08" PRIx64 " " "s5" " %08" PRIx64 " " "s6" " %08" PRIx64 " " "s7" " %08" PRIx64 "\n"
+    "t8" " %08" PRIx64 " " "t9" " %08" PRIx64 " " "k0" " %08" PRIx64 " " "k1" " %08" PRIx64 " " "gp" " %08" PRIx64 " " "sp" " %08" PRIx64 " " "s8" " %08" PRIx64 " " "ra" " %08" PRIx64 "\n",
+
+    LOW32(cpu_state.regs[0]),  LOW32(cpu_state.regs[1]),  LOW32(cpu_state.regs[2]),  LOW32(cpu_state.regs[3]),  LOW32(cpu_state.regs[4]),  LOW32(cpu_state.regs[5]),  LOW32(cpu_state.regs[6]),  LOW32(cpu_state.regs[7]),
+    LOW32(cpu_state.regs[8]),  LOW32(cpu_state.regs[9]),  LOW32(cpu_state.regs[10]), LOW32(cpu_state.regs[11]), LOW32(cpu_state.regs[12]), LOW32(cpu_state.regs[13]), LOW32(cpu_state.regs[14]), LOW32(cpu_state.regs[15]),
+    LOW32(cpu_state.regs[16]), LOW32(cpu_state.regs[17]), LOW32(cpu_state.regs[18]), LOW32(cpu_state.regs[19]), LOW32(cpu_state.regs[20]), LOW32(cpu_state.regs[21]), LOW32(cpu_state.regs[22]), LOW32(cpu_state.regs[23]),
+    LOW32(cpu_state.regs[24]), LOW32(cpu_state.regs[25]), LOW32(cpu_state.regs[26]), LOW32(cpu_state.regs[27]), LOW32(cpu_state.regs[28]), LOW32(cpu_state.regs[29]), LOW32(cpu_state.regs[30]), LOW32(cpu_state.regs[31]));
 #else
 #error
 #endif
