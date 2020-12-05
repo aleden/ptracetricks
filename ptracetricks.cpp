@@ -821,6 +821,17 @@ void dump_cpu_state(std::ostream &out, const cpu_state_t &cpu_state) {
     cpu_state.uregs[4],  cpu_state.uregs[5],  cpu_state.uregs[6],  cpu_state.uregs[7],
     cpu_state.uregs[8],  cpu_state.uregs[9],  cpu_state.uregs[10], cpu_state.uregs[11],
     cpu_state.uregs[12], cpu_state.uregs[13], cpu_state.uregs[14], cpu_state.uregs[15]);
+#elif defined(__mips__)
+  snprintf(buff, sizeof(buff),
+    "r0" " %08x " "at" " %08x " "v0" " %08x " "v1" " %08x " "a0" " %08x " "a1" " %08x " "a2" " %08x " "a3" " %08x " "\n"
+    "t0" " %08x " "t1" " %08x " "t2" " %08x " "t3" " %08x " "t4" " %08x " "t5" " %08x " "t6" " %08x " "t7" " %08x " "\n"
+    "s0" " %08x " "s1" " %08x " "s2" " %08x " "s3" " %08x " "s4" " %08x " "s5" " %08x " "s6" " %08x " "s7" " %08x " "\n"
+    "t8" " %08x " "t9" " %08x " "k0" " %08x " "k1" " %08x " "gp" " %08x " "sp" " %08x " "s8" " %08x " "ra" " %08x " "\n",
+
+    cpu_state.regs[0],  cpu_state.regs[1],  cpu_state.regs[2],  cpu_state.regs[3],  cpu_state.regs[4],  cpu_state.regs[5],  cpu_state.regs[6],  cpu_state.regs[7],
+    cpu_state.regs[8],  cpu_state.regs[9],  cpu_state.regs[10], cpu_state.regs[11], cpu_state.regs[12], cpu_state.regs[13], cpu_state.regs[14], cpu_state.regs[15],
+    cpu_state.regs[16], cpu_state.regs[17], cpu_state.regs[18], cpu_state.regs[19], cpu_state.regs[20], cpu_state.regs[21], cpu_state.regs[22], cpu_state.regs[23],
+    cpu_state.regs[24], cpu_state.regs[25], cpu_state.regs[26], cpu_state.regs[27], cpu_state.regs[28], cpu_state.regs[29], cpu_state.regs[30], cpu_state.regs[31]);
 #else
 #error
 #endif
