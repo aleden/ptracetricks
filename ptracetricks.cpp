@@ -759,6 +759,9 @@ int TracerLoop(pid_t child) {
           // signal-delivery-stop, recommended practice is to always pass 0 in
           // sig.
         } else {
+          //
+          // (4) signal-delivery-stop
+          //
           cpu_state_t cpu_state;
           _ptrace_get_cpu_state(child, cpu_state);
 
@@ -766,14 +769,16 @@ int TracerLoop(pid_t child) {
 
           if (stopsig == SIGILL &&
               BreakpointPCMap.count(pc)) {
+            //
+            // suppress the signal ; this is a breakpoint
+            //
             on_breakpoint(BreakpointPCMap[pc], child, cpu_state);
           } else {
             //
-            // (4) signal-delivery-stop
+            // deliver it
             //
             cerr << "delivering signal number " << stopsig << " [" << child << "]\n";
 
-            // deliver it
             sig = stopsig;
           }
         }
