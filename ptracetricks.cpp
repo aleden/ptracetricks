@@ -880,7 +880,8 @@ bool virtual_memory_mappings_for_process(pid_t child,
     bool x = flag_x == 'x';
     bool p = flag_p == 'p';
 
-    out[path] = min + offset;
+    if (x)
+      out[path] = min + offset;
   }
 
   free(line);
