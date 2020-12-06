@@ -782,7 +782,7 @@ int TracerLoop(pid_t child) {
             //
             // deliver it
             //
-            cerr << "delivering signal number " << stopsig << " [" << child << "]\n";
+            cerr << "delivering signal number " << std::dec << stopsig << " [" << child << "]\n";
 
             sig = stopsig;
           }
@@ -791,7 +791,7 @@ int TracerLoop(pid_t child) {
         //
         // the child terminated
         //
-        cerr << "child " << child << " terminated\n";
+        cerr << "child " << std::dec << child << " terminated\n";
 
         child = -1;
       }
