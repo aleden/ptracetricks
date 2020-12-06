@@ -223,9 +223,11 @@ int main(int argc, char **argv) {
       continue;
     }
 
+    fs::path canon_path = fs::canonical(L);
+
     uintptr_t rva = std::stol(R, nullptr, 0x10);
 
-    ptracetricks::Breakpoints.emplace_back(L, rva);
+    ptracetricks::Breakpoints.emplace_back(canon_path.string(), rva);
   }
 
   ptracetricks::BreakpointsInsnWord.resize(ptracetricks::Breakpoints.size());
@@ -899,8 +901,20 @@ bool executable_virtual_memory_mappings_for_process(
     bool x = flag_x == 'x';
     bool p = flag_p == 'p';
 
-    if (x)
-      out[path] = min + offset;
+    if (x) {
+      if (fs::exists(path)) {
+        fs::path canon_path(fs::canonical(path));
+        auto s = canon_path.string();
+        if (out.find(s) == out.end()) {
+          out.emplace(s, min + offset);
+        } else {
+          if (opts::Verbose) {
+            cerr << "multiple executable mappings for " << path << " ("
+                 << __FILE__ << ':' << __LINE__ << ")!\n";
+          }
+        }
+      }
+    }
   }
 
   free(line);
@@ -939,7 +953,7 @@ void PlantBreakpoint(unsigned Idx,
   }
 
   BreakpointPCMap[va] = Idx;
-};
+}
 
 void _ptrace_get_cpu_state(pid_t child, cpu_state_t &out) {
 #if defined(__mips64) || defined(__mips__)
