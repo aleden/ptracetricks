@@ -704,36 +704,37 @@ int TracerLoop(pid_t child) {
           if (unlikely(event)) {
             switch (event) {
             case PTRACE_EVENT_VFORK:
-              cerr << "ptrace event (PTRACE_EVENT_VFORK) [" << child << "]\n";
+              cerr << "ptrace event (PTRACE_EVENT_VFORK) [" << std::dec << child << "]\n";
               break;
             case PTRACE_EVENT_FORK:
-              cerr << "ptrace event (PTRACE_EVENT_FORK) [" << child << "]\n";
+              cerr << "ptrace event (PTRACE_EVENT_FORK) [" << std::dec << child << "]\n";
               break;
             case PTRACE_EVENT_CLONE: {
               pid_t new_child;
               ptrace(PTRACE_GETEVENTMSG, child, nullptr, &new_child);
 
-              cerr << "ptrace event (PTRACE_EVENT_CLONE) -> " << new_child << " [" << child << "]\n";
+              cerr << "ptrace event (PTRACE_EVENT_CLONE) -> " << std::dec
+                   << new_child << " [" << child << "]\n";
               break;
             }
             case PTRACE_EVENT_VFORK_DONE:
-              cerr << "ptrace event (PTRACE_EVENT_VFORK_DONE) [" << child << "]\n";
+              cerr << "ptrace event (PTRACE_EVENT_VFORK_DONE) [" << std::dec  << child << "]\n";
               break;
             case PTRACE_EVENT_EXEC:
-              cerr << "ptrace event (PTRACE_EVENT_EXEC) [" << child << "]\n";
+              cerr << "ptrace event (PTRACE_EVENT_EXEC) [" << std::dec  << child << "]\n";
 
               SeenExec = true;
               break;
             case PTRACE_EVENT_EXIT:
-              cerr << "ptrace event (PTRACE_EVENT_EXIT) [" << child << "]\n";
+              cerr << "ptrace event (PTRACE_EVENT_EXIT) ["  << std::dec << child << "]\n";
               break;
 #ifdef PTRACE_EVENT_STOP
             case PTRACE_EVENT_STOP:
-              cerr << "ptrace event (PTRACE_EVENT_STOP) [" << child << "]\n";
+              cerr << "ptrace event (PTRACE_EVENT_STOP) ["  << std::dec << child << "]\n";
               break;
 #endif
             case PTRACE_EVENT_SECCOMP:
-              cerr << "ptrace event (PTRACE_EVENT_SECCOMP) [" << child << "]\n";
+              cerr << "ptrace event (PTRACE_EVENT_SECCOMP) [" << std::dec  << child << "]\n";
               break;
             }
           } else {
@@ -758,7 +759,7 @@ int TracerLoop(pid_t child) {
           // (3) group-stop
           //
 
-          cerr << "ptrace group-stop [" << child << "]\n";
+          cerr << "ptrace group-stop [" << std::dec << child << "]\n";
 
           // When restarting a tracee from a ptrace-stop other than
           // signal-delivery-stop, recommended practice is to always pass 0 in
