@@ -810,8 +810,10 @@ static void dump_cpu_state(std::ostream &out, const cpu_state_t &);
 void on_breakpoint(unsigned Idx, pid_t child, const cpu_state_t &cpu_state) {
   long pc = pc_of_cpu_state(cpu_state);
 
-  if (opts::Verbose)
-    std::cerr << "on_breakpoint @ " << std::hex << pc << std::endl;
+  std::cerr << "[breakpoint] #" << std::dec << Idx << " @ "
+            << Breakpoints.at(Idx).first << "+0x" << std::hex
+            << Breakpoints.at(Idx).second << " (0x" << std::hex << pc
+            << ")\n";
 
   dump_cpu_state(std::cout, cpu_state);
 
