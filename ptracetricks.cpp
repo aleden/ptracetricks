@@ -85,8 +85,8 @@ static _NORET void usage() {
           "  --version (-V)\n"
           "  --verbose (-v)\n"
           "  --syscalls (-s)\n"
-          "  --breakpoint (-b) /path/to/dso+RVA\n"
-          "  --attach (-p) PID\n";
+          "  --breakpoint /path/to/dso+RVA (-b)\n"
+          "  --attach PID (-p)\n";
   exit(0);
 }
 
@@ -186,6 +186,9 @@ int main(int argc, char **argv) {
       opts::Prog = _argv[index];
       break;
     }
+
+    if (opts::Prog.empty())
+      ptracetricks::usage();
   }
 
   //
