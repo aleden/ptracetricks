@@ -53,6 +53,9 @@ typedef std::pair<std::string, uintptr_t> breakpoint_t;
 static std::unordered_map<uintptr_t, unsigned> BreakpointPCMap;
 static std::vector<breakpoint_t> Breakpoints;
 static std::vector<long> BreakpointsInsnWord;
+#if defined(__mips__) || defined(__mips__)
+static std::vector<long> BreakpointsInsnWordAfter;
+#endif
 
 static int ChildProc(void);
 static int TracerLoop(pid_t child);
@@ -231,6 +234,7 @@ int main(int argc, char **argv) {
   }
 
   ptracetricks::BreakpointsInsnWord.resize(ptracetricks::Breakpoints.size());
+  ptracetricks::BreakpointsInsnWordAfter.resize(ptracetricks::Breakpoints.size());
 
   /* Line buffer stdout to ensure lines are written atomically and immediately
      so that processes running in parallel do not intersperse their output.  */
@@ -746,12 +750,26 @@ int TracerLoop(pid_t child) {
 
             long pc = pc_of_cpu_state(cpu_state);
 
-            auto it = BreakpointPCMap.find(pc);
-            if (it == BreakpointPCMap.end()) {
+            if (BreakpointPCMap.count(pc)) {
+              on_breakpoint(BreakpointPCMap[pc], child, cpu_state);
+#if defined(__mips__) /* emulated singlestep on this arch */
+            } else if (BreakpointPCMap.count(pc - 4)) {
+              unsigned Idx = BreakpointPCMap[pc - 4];
+
+              //
+              // restore original insn word at program counter
+              //
+              _ptrace_pokedata(child, pc, BreakpointsInsnWordAfter.at(Idx));
+
+              //
+              // replant original breakpoint before this insn
+              //
+              uint32_t brk_insn = 0x0000000d;
+              _ptrace_pokedata(child, pc - 4, brk_insn);
+#endif
+            } else {
               std::cerr << "warning: no breakpoint @ " << std::hex << pc
                         << std::endl;
-            } else {
-              on_breakpoint((*it).second, child, cpu_state);
             }
           }
         } else if (ptrace(PTRACE_GETSIGINFO, child, 0, &si) < 0) {
@@ -779,6 +797,22 @@ int TracerLoop(pid_t child) {
             // suppress the signal ; this is a breakpoint
             //
             on_breakpoint(BreakpointPCMap[pc], child, cpu_state);
+#if defined(__mips__) || defined(__mips__)
+          } else if (stopsig == SIGILL &&
+                     BreakpointPCMap.count(pc - 4)) {
+            unsigned Idx = BreakpointPCMap[pc - 4];
+
+            //
+            // restore original insn word
+            //
+            _ptrace_pokedata(child, pc, BreakpointsInsnWordAfter.at(Idx));
+
+            //
+            // replant original breakpoint
+            //
+            uint32_t brk_insn = 0x0000000d;
+            _ptrace_pokedata(child, pc - 4, brk_insn);
+#endif
           } else {
             //
             // deliver it
@@ -824,6 +858,19 @@ void on_breakpoint(unsigned Idx, pid_t child, const cpu_state_t &cpu_state) {
   // restore original instruction word
   //
   _ptrace_pokedata(child, pc, BreakpointsInsnWord.at(Idx));
+
+#if defined(__mips__) || defined(__mips__)
+  //
+  // plant transient breakpoint following this one (emulated single-step)
+  //
+  uint32_t brk_insn = 0x0000000d;
+  _ptrace_pokedata(child, pc + 4, brk_insn);
+#else
+  //
+  // single step
+  //
+#error "TODO"
+#endif
 }
 
 void dump_cpu_state(std::ostream &out, const cpu_state_t &cpu_state) {
@@ -950,11 +997,16 @@ void PlantBreakpoint(unsigned Idx,
   uintptr_t va = rva + (*it).second;
 
   {
-    long insnword = _ptrace_peekdata(child, va);
-    BreakpointsInsnWord.at(Idx) = insnword;
+    long insnword1 = _ptrace_peekdata(child, va);
+    BreakpointsInsnWord.at(Idx) = insnword1;
 
-    arch_put_breakpoint(&insnword);
-    _ptrace_pokedata(child, va, insnword);
+#if defined(__mips__) || defined(__mips__)
+    long insnword2 = _ptrace_peekdata(child, va + 4);
+    BreakpointsInsnWordAfter.at(Idx) = insnword2;
+#endif
+
+    arch_put_breakpoint(&insnword1);
+    _ptrace_pokedata(child, va, insnword1);
   }
 
   BreakpointPCMap[va] = Idx;
