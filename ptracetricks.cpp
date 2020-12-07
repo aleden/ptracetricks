@@ -234,7 +234,9 @@ int main(int argc, char **argv) {
   }
 
   ptracetricks::BreakpointsInsnWord.resize(ptracetricks::Breakpoints.size());
+#if defined(__mips64) || defined(__mips__)
   ptracetricks::BreakpointsInsnWordAfter.resize(ptracetricks::Breakpoints.size());
+#endif
 
   /* Line buffer stdout to ensure lines are written atomically and immediately
      so that processes running in parallel do not intersperse their output.  */
@@ -752,7 +754,7 @@ int TracerLoop(pid_t child) {
 
             if (BreakpointPCMap.count(pc)) {
               on_breakpoint(BreakpointPCMap[pc], child, cpu_state);
-#if defined(__mips__) /* emulated singlestep on this arch */
+#if defined(__mips64) || defined(__mips__)
             } else if (BreakpointPCMap.count(pc - 4)) {
               unsigned Idx = BreakpointPCMap[pc - 4];
 
@@ -797,7 +799,7 @@ int TracerLoop(pid_t child) {
             // suppress the signal ; this is a breakpoint
             //
             on_breakpoint(BreakpointPCMap[pc], child, cpu_state);
-#if defined(__mips__) || defined(__mips__)
+#if defined(__mips64) || defined(__mips__)
           } else if (stopsig == SIGILL &&
                      BreakpointPCMap.count(pc - 4)) {
             unsigned Idx = BreakpointPCMap[pc - 4];
@@ -859,7 +861,7 @@ void on_breakpoint(unsigned Idx, pid_t child, const cpu_state_t &cpu_state) {
   //
   _ptrace_pokedata(child, pc, BreakpointsInsnWord.at(Idx));
 
-#if defined(__mips__) || defined(__mips__)
+#if defined(__mips64) || defined(__mips__)
   //
   // plant transient breakpoint following this one (emulated single-step)
   //
@@ -1000,7 +1002,7 @@ void PlantBreakpoint(unsigned Idx,
     long insnword1 = _ptrace_peekdata(child, va);
     BreakpointsInsnWord.at(Idx) = insnword1;
 
-#if defined(__mips__) || defined(__mips__)
+#if defined(__mips64) || defined(__mips__)
     long insnword2 = _ptrace_peekdata(child, va + 4);
     BreakpointsInsnWordAfter.at(Idx) = insnword2;
 #endif
