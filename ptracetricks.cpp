@@ -844,6 +844,8 @@ int TracerLoop(pid_t child) {
 
 static void dump_cpu_state(std::ostream &out, const cpu_state_t &);
 
+static void arch_put_breakpoint(void *code);
+
 void on_breakpoint(unsigned Idx, pid_t child, const cpu_state_t &cpu_state) {
   long pc = pc_of_cpu_state(cpu_state);
 
@@ -871,7 +873,21 @@ void on_breakpoint(unsigned Idx, pid_t child, const cpu_state_t &cpu_state) {
   //
   // single step
   //
-#error "TODO"
+  if (ptrace(PTRACE_SINGLESTEP, child, 0, 0) < 0) {
+    cerr << "PTRACE_SINGLESTEP failed (" << strerror(errno) << ")\n";
+  }
+
+  {
+    int status;
+    child = waitpid(child, &status, __WALL);
+  }
+
+  //
+  // (silently) replant breakpoint
+  //
+  long insnword = BreakpointsInsnWord.at(Idx);
+  arch_put_breakpoint(&insnword);
+  _ptrace_pokedata(child, pc, insnword);
 #endif
 }
 
@@ -976,8 +992,6 @@ bool executable_virtual_memory_mappings_for_process(
 
   return true;
 }
-
-static void arch_put_breakpoint(void *code);
 
 void PlantBreakpoint(unsigned Idx,
                      pid_t child,
