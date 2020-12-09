@@ -754,7 +754,7 @@ int TracerLoop(pid_t child) {
 
             if (BreakpointPCMap.count(pc)) {
               on_breakpoint(BreakpointPCMap[pc], child, cpu_state);
-#if defined(__mips64) || defined(__mips__)
+#if defined(__mips64) || defined(__mips__) /* emulated single-stepping */
             } else if (BreakpointPCMap.count(pc - 4)) {
               unsigned Idx = BreakpointPCMap[pc - 4];
 
@@ -799,7 +799,7 @@ int TracerLoop(pid_t child) {
             // suppress the signal ; this is a breakpoint
             //
             on_breakpoint(BreakpointPCMap[pc], child, cpu_state);
-#if defined(__mips64) || defined(__mips__)
+#if defined(__mips64) || defined(__mips__) /* emulated single-stepping */
           } else if (stopsig == SIGILL &&
                      BreakpointPCMap.count(pc - 4)) {
             unsigned Idx = BreakpointPCMap[pc - 4];
