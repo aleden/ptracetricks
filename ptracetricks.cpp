@@ -656,6 +656,9 @@ int TracerLoop(pid_t child) {
                 case syscalls::NR::mprotect:
                   out << "0x" << std::hex << a1 << ", " << std::dec << a2 << ", " << a3;
                   break;
+#if defined(__mips64) || defined(__mips__)
+                case syscalls::NR::mips_mmap:
+#endif
                 case syscalls::NR::mmap2:
                   out << "0x" << std::hex << a1 << ", " << std::dec << a2 << ", " << a3 << ", " << a4 << ", " << a5 << ", " << a6;
                   break;
