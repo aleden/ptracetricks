@@ -634,6 +634,9 @@ int TracerLoop(pid_t child) {
                 case syscalls::NR::stat64:
                   out << '\"' << _ptrace_read_string(child, a1) << "\", 0x" << std::hex << a2;
                   break;
+                case syscalls::NR::open:
+                  out << '\"' << _ptrace_read_string(child, a1) << "\", " << std::dec << a2 << ", " << a3;
+                  break;
                 case syscalls::NR::clock_settime:
                 case syscalls::NR::clock_gettime:
                   out << std::dec << a1 << ", " << "0x" << std::hex << a2;
