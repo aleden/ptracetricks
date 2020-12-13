@@ -261,12 +261,14 @@ int main(int argc, char **argv) {
     // since PTRACE_ATTACH succeeded, we know the tracee was sent a SIGSTOP.
     // wait on it.
     //
+    cerr << "waiting for SIGSTOP...\n";
     {
       int status;
       do
         waitpid(-1, &status, __WALL);
       while (!WIFSTOPPED(status));
     }
+    cerr << "waited on SIGSTOP.\n";
 
     ptracetricks::SeenExec = true; /* XXX */
     return ptracetricks::TracerLoop(child);
@@ -671,6 +673,7 @@ int TracerLoop(pid_t child) {
                       << a4 << ", "
                       << std::hex
                       << "0x" << a5 << ", "
+                      << std::dec
                       << a6;
                   break;
                 }
