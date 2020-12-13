@@ -663,6 +663,16 @@ int TracerLoop(pid_t child) {
                        << a4 << ", "
                        << a5;
                   break;
+                case syscalls::NR::ipc:
+                  out << std::dec
+                      << a1 << ", "
+                      << a2 << ", "
+                      << a3 << ", "
+                      << a4 << ", "
+                      << std::hex
+                      << "0x" << a5 << ", "
+                      << a6;
+                  break;
                 }
               } catch (...) {
               }
