@@ -649,6 +649,7 @@ int TracerLoop(pid_t child) {
                 case syscalls::NR::write:
                   out << std::dec << a1 << ", 0x" << std::hex << a2 << ", " << std::dec << a3;
                   break;
+                case syscalls::NR::sysinfo:
                 case syscalls::NR::brk:
                   out << "0x" << std::hex << a1;
                   break;
