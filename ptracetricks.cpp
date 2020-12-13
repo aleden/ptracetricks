@@ -681,6 +681,12 @@ int TracerLoop(pid_t child) {
                       << std::dec
                       << a6;
                   break;
+                case syscalls::NR::ioctl:
+                  out << std::dec
+                       << a1 << ", "
+                       << a2 << ", "
+                       << a3;
+                  break;
                 }
               } catch (...) {
               }
