@@ -891,38 +891,49 @@ void on_breakpoint(unsigned Idx, pid_t child, const cpu_state_t &cpu_state) {
 #endif
 }
 
-void dump_cpu_state(std::ostream &out, const cpu_state_t &cpu_state) {
+void dump_cpu_state(std::ostream &out, const cpu_state_t &X) {
   out << '\n';
 
   char buff[0x1000];
 
-#if defined(__arm__)
-  snprintf(buff, sizeof(buff),
-    "R00=%08lx R01=%08lx R02=%08lx R03=%08lx" "\n"
-    "R04=%08lx R05=%08lx R06=%08lx R07=%08lx" "\n"
-    "R08=%08lx R09=%08lx R10=%08lx R11=%08lx" "\n"
-    "R12=%08lx R13=%08lx R14=%08lx R15=%08lx" "\n",
-
-    cpu_state.uregs[0],  cpu_state.uregs[1],  cpu_state.uregs[2],  cpu_state.uregs[3],
-    cpu_state.uregs[4],  cpu_state.uregs[5],  cpu_state.uregs[6],  cpu_state.uregs[7],
-    cpu_state.uregs[8],  cpu_state.uregs[9],  cpu_state.uregs[10], cpu_state.uregs[11],
-    cpu_state.uregs[12], cpu_state.uregs[13], cpu_state.uregs[14], cpu_state.uregs[15]);
-#elif defined(__mips__)
-  auto LOW32 = [](uint64_t dword) -> uint64_t {
+  auto LOW32 = [](uint64_t dword) -> uint32_t {
     constexpr uint64_t mask = 0xffffffff;
     return dword & mask;
   };
 
+#if defined(__arm__)
   snprintf(buff, sizeof(buff),
-    "r0" " %08" PRIx64 " " "at" " %08" PRIx64 " " "v0" " %08" PRIx64 " " "v1" " %08" PRIx64 " " "a0" " %08" PRIx64 " " "a1" " %08" PRIx64 " " "a2" " %08" PRIx64 " " "a3" " %08" PRIx64 "\n"
-    "t0" " %08" PRIx64 " " "t1" " %08" PRIx64 " " "t2" " %08" PRIx64 " " "t3" " %08" PRIx64 " " "t4" " %08" PRIx64 " " "t5" " %08" PRIx64 " " "t6" " %08" PRIx64 " " "t7" " %08" PRIx64 "\n"
-    "s0" " %08" PRIx64 " " "s1" " %08" PRIx64 " " "s2" " %08" PRIx64 " " "s3" " %08" PRIx64 " " "s4" " %08" PRIx64 " " "s5" " %08" PRIx64 " " "s6" " %08" PRIx64 " " "s7" " %08" PRIx64 "\n"
-    "t8" " %08" PRIx64 " " "t9" " %08" PRIx64 " " "k0" " %08" PRIx64 " " "k1" " %08" PRIx64 " " "gp" " %08" PRIx64 " " "sp" " %08" PRIx64 " " "s8" " %08" PRIx64 " " "ra" " %08" PRIx64 "\n",
+    "R00=%08" PRIx32 " R01=%08" PRIx32 " R02=%08" PRIx32 " R03=%08" PRIx32 "\n"
+    "R04=%08" PRIx32 " R05=%08" PRIx32 " R06=%08" PRIx32 " R07=%08" PRIx32 "\n"
+    "R08=%08" PRIx32 " R09=%08" PRIx32 " R10=%08" PRIx32 " R11=%08" PRIx32 "\n"
+    "R12=%08" PRIx32 " R13=%08" PRIx32 " R14=%08" PRIx32 " R15=%08" PRIx32 "\n",
 
-    LOW32(cpu_state.regs[0]),  LOW32(cpu_state.regs[1]),  LOW32(cpu_state.regs[2]),  LOW32(cpu_state.regs[3]),  LOW32(cpu_state.regs[4]),  LOW32(cpu_state.regs[5]),  LOW32(cpu_state.regs[6]),  LOW32(cpu_state.regs[7]),
-    LOW32(cpu_state.regs[8]),  LOW32(cpu_state.regs[9]),  LOW32(cpu_state.regs[10]), LOW32(cpu_state.regs[11]), LOW32(cpu_state.regs[12]), LOW32(cpu_state.regs[13]), LOW32(cpu_state.regs[14]), LOW32(cpu_state.regs[15]),
-    LOW32(cpu_state.regs[16]), LOW32(cpu_state.regs[17]), LOW32(cpu_state.regs[18]), LOW32(cpu_state.regs[19]), LOW32(cpu_state.regs[20]), LOW32(cpu_state.regs[21]), LOW32(cpu_state.regs[22]), LOW32(cpu_state.regs[23]),
-    LOW32(cpu_state.regs[24]), LOW32(cpu_state.regs[25]), LOW32(cpu_state.regs[26]), LOW32(cpu_state.regs[27]), LOW32(cpu_state.regs[28]), LOW32(cpu_state.regs[29]), LOW32(cpu_state.regs[30]), LOW32(cpu_state.regs[31]));
+    LOW32(X.uregs[0]),  LOW32(X.uregs[1]),  LOW32(X.uregs[2]),  LOW32(X.uregs[3]),
+    LOW32(X.uregs[4]),  LOW32(X.uregs[5]),  LOW32(X.uregs[6]),  LOW32(X.uregs[7]),
+    LOW32(X.uregs[8]),  LOW32(X.uregs[9]),  LOW32(X.uregs[10]), LOW32(X.uregs[11]),
+    LOW32(X.uregs[12]), LOW32(X.uregs[13]), LOW32(X.uregs[14]), LOW32(X.uregs[15]));
+#elif defined(__mips64)
+  snprintf(buff, sizeof(buff),
+    "r0" " %16" PRIx64 " " "at" " %16" PRIx64 " " "v0" " %16" PRIx64 " " "v1" " %16" PRIx64 " " "a0" " %16" PRIx64 " " "a1" " %16" PRIx64 " " "a2" " %16" PRIx64 " " "a3" " %16" PRIx64 "\n"
+    "t0" " %16" PRIx64 " " "t1" " %16" PRIx64 " " "t2" " %16" PRIx64 " " "t3" " %16" PRIx64 " " "t4" " %16" PRIx64 " " "t5" " %16" PRIx64 " " "t6" " %16" PRIx64 " " "t7" " %16" PRIx64 "\n"
+    "s0" " %16" PRIx64 " " "s1" " %16" PRIx64 " " "s2" " %16" PRIx64 " " "s3" " %16" PRIx64 " " "s4" " %16" PRIx64 " " "s5" " %16" PRIx64 " " "s6" " %16" PRIx64 " " "s7" " %16" PRIx64 "\n"
+    "t8" " %16" PRIx64 " " "t9" " %16" PRIx64 " " "k0" " %16" PRIx64 " " "k1" " %16" PRIx64 " " "gp" " %16" PRIx64 " " "sp" " %16" PRIx64 " " "s8" " %16" PRIx64 " " "ra" " %16" PRIx64 "\n",
+
+    X.regs[0],  X.regs[1],  X.regs[2],  X.regs[3],  X.regs[4],  X.regs[5],  X.regs[6],  X.regs[7],
+    X.regs[8],  X.regs[9],  X.regs[10], X.regs[11], X.regs[12], X.regs[13], X.regs[14], X.regs[15],
+    X.regs[16], X.regs[17], X.regs[18], X.regs[19], X.regs[20], X.regs[21], X.regs[22], X.regs[23],
+    X.regs[24], X.regs[25], X.regs[26], X.regs[27], X.regs[28], X.regs[29], X.regs[30], X.regs[31]);
+#elif defined(__mips__)
+  snprintf(buff, sizeof(buff),
+    "r0" " %08" PRIx32 " " "at" " %08" PRIx32 " " "v0" " %08" PRIx32 " " "v1" " %08" PRIx32 " " "a0" " %08" PRIx32 " " "a1" " %08" PRIx32 " " "a2" " %08" PRIx32 " " "a3" " %08" PRIx32 "\n"
+    "t0" " %08" PRIx32 " " "t1" " %08" PRIx32 " " "t2" " %08" PRIx32 " " "t3" " %08" PRIx32 " " "t4" " %08" PRIx32 " " "t5" " %08" PRIx32 " " "t6" " %08" PRIx32 " " "t7" " %08" PRIx32 "\n"
+    "s0" " %08" PRIx32 " " "s1" " %08" PRIx32 " " "s2" " %08" PRIx32 " " "s3" " %08" PRIx32 " " "s4" " %08" PRIx32 " " "s5" " %08" PRIx32 " " "s6" " %08" PRIx32 " " "s7" " %08" PRIx32 "\n"
+    "t8" " %08" PRIx32 " " "t9" " %08" PRIx32 " " "k0" " %08" PRIx32 " " "k1" " %08" PRIx32 " " "gp" " %08" PRIx32 " " "sp" " %08" PRIx32 " " "s8" " %08" PRIx32 " " "ra" " %08" PRIx32 "\n",
+
+    LOW32(X.regs[0]),  LOW32(X.regs[1]),  LOW32(X.regs[2]),  LOW32(X.regs[3]),  LOW32(X.regs[4]),  LOW32(X.regs[5]),  LOW32(X.regs[6]),  LOW32(X.regs[7]),
+    LOW32(X.regs[8]),  LOW32(X.regs[9]),  LOW32(X.regs[10]), LOW32(X.regs[11]), LOW32(X.regs[12]), LOW32(X.regs[13]), LOW32(X.regs[14]), LOW32(X.regs[15]),
+    LOW32(X.regs[16]), LOW32(X.regs[17]), LOW32(X.regs[18]), LOW32(X.regs[19]), LOW32(X.regs[20]), LOW32(X.regs[21]), LOW32(X.regs[22]), LOW32(X.regs[23]),
+    LOW32(X.regs[24]), LOW32(X.regs[25]), LOW32(X.regs[26]), LOW32(X.regs[27]), LOW32(X.regs[28]), LOW32(X.regs[29]), LOW32(X.regs[30]), LOW32(X.regs[31]));
 #else
 #error
 #endif
