@@ -84,12 +84,12 @@ static _NORET void usage() {
           "ptracetricks [OPTIONS] --attach PID\n"
           "\n"
           "Options:\n"
-          "  --help (-h)\n"
-          "  --version (-V)\n"
-          "  --verbose (-v)\n"
-          "  --syscalls (-s)\n"
-          "  --breakpoint /path/to/dso+RVA (-b)\n"
-          "  --attach PID (-p)\n";
+          "  -h, --help\n"
+          "  -V, --version\n"
+          "  -v, --verbose\n"
+          "  -s, --syscalls\n"
+          "  -b, --breakpoint /path/to/dso+RVA\n"
+          "  -p, --attach PID\n";
   exit(0);
 }
 
