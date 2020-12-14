@@ -903,9 +903,9 @@ void on_breakpoint(unsigned Idx, pid_t child, const cpu_state_t &cpu_state) {
   //
   // single step
   //
-  if (ptrace(PTRACE_SINGLESTEP, child, 0, 0) < 0) {
-    cerr << "PTRACE_SINGLESTEP failed (" << strerror(errno) << ")\n";
-  }
+  if (ptrace(PTRACE_SINGLESTEP, child, 0, 0) < 0)
+    throw std::runtime_error(std::string("PTRACE_SINGLESTEP failed : ") +
+                             strerror(errno));
 
   {
     int status;
