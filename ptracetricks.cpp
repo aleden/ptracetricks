@@ -670,11 +670,11 @@ int TracerLoop(pid_t child) {
                   break;
                 case syscalls::NR::prctl:
                   out << std::dec
-                       << a1 << ", "
-                       << a2 << ", "
-                       << a3 << ", "
-                       << a4 << ", "
-                       << a5;
+                      << a1 << ", "
+                      << a2 << ", "
+                      << a3 << ", "
+                      << a4 << ", "
+                      << a5;
                   break;
                 case syscalls::NR::ipc:
                   out << std::dec
@@ -689,9 +689,9 @@ int TracerLoop(pid_t child) {
                   break;
                 case syscalls::NR::ioctl:
                   out << std::dec
-                       << a1 << ", "
-                       << a2 << ", "
-                       << a3;
+                      << a1 << ", "
+                      << a2 << ", "
+                      << a3;
                   break;
                 }
               } catch (...) {
