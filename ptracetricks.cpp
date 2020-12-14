@@ -699,6 +699,9 @@ int TracerLoop(pid_t child) {
 
               bool IsRetPointer = false;
               switch (no) {
+#if defined(__mips64) || defined(__mips__)
+              case syscalls::NR::mips_mmap:
+#endif
               case syscalls::NR::brk:
               case syscalls::NR::mmap2:
                 IsRetPointer = true;
