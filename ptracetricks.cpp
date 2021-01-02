@@ -721,11 +721,23 @@ int TracerLoop(pid_t child) {
               out << '\n';
             };
 
-            if (opts::Syscalls &&
-                no >= 0 &&
-                no < syscalls::NR_MAX &&
-                syscall_names[no])
-              print_syscall(std::cout);
+            auto print_unknown_syscall = [&](std::ostream &out) -> void {
+              out << "syscall" << '('
+                  << std::dec << no << ", "
+                  << "0x" << std::hex << a1 << ", "
+                  << "0x" << std::hex << a2 << ", "
+                  << "0x" << std::hex << a3 << ", "
+                  << "0x" << std::hex << a4 << ", "
+                  << "0x" << std::hex << a5 << ", "
+                  << "0x" << std::hex << a6 << ") = " << std::dec << ret << '\n';
+            };
+
+            if (opts::Syscalls) {
+              if (no >= 0 && no < syscalls::NR_MAX && syscall_names[no])
+                print_syscall(std::cout);
+              else
+                print_unknown_syscall(std::cout);
+            }
           }
 
           dir ^= 1;
