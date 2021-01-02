@@ -578,7 +578,12 @@ int TracerLoop(pid_t child) {
             syscall_state.a5 = a5;
             syscall_state.a6 = a6;
           } else { /* exit */
-            auto &ret =
+#if defined(__mips64) || defined(__mips__)
+            long r7 = cpu_state.regs[7];
+            long r2 = cpu_state.regs[2];
+#endif
+
+            long ret =
 #if defined(__x86_64__)
                 cpu_state.rax
 #elif defined(__i386__)
@@ -588,7 +593,7 @@ int TracerLoop(pid_t child) {
 #elif defined(__arm__)
                 cpu_state.uregs[0]
 #elif defined(__mips64) || defined(__mips__)
-                cpu_state.regs[2]
+                r7 && r2 > 0 ? -r2 : r2
 #else
 #error
 #endif
@@ -692,6 +697,9 @@ int TracerLoop(pid_t child) {
                       << a1 << ", "
                       << a2 << ", "
                       << a3;
+                  break;
+                case syscalls::NR::readlink:
+                  out << '\"' << _ptrace_read_string(child, a1) << '\"';
                   break;
                 }
               } catch (...) {
