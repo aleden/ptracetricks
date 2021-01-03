@@ -699,7 +699,15 @@ int TracerLoop(pid_t child) {
                       << a3;
                   break;
                 case syscalls::NR::readlink:
-                  out << '\"' << _ptrace_read_string(child, a1) << '\"';
+                  out << '\"' << _ptrace_read_string(child, a1) << '\"' << ", "
+                      << "0x" << std::hex << a2 << ", "
+                      << std::dec << a3;
+                  break;
+                case syscalls::NR::readlinkat:
+                  out << std::dec << a1 << ", "
+                      << '\"' << _ptrace_read_string(child, a2) << '\"' << ", "
+                      << "0x" << std::hex << a3 << ", "
+                      << std::dec << a4;
                   break;
                 }
               } catch (...) {
