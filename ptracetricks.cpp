@@ -43,6 +43,7 @@ static bool Verbose;
 static bool Syscalls;
 static unsigned PID;
 static std::vector<const char *> Breakpoints;
+static bool CallStack;
 
 } // namespace opts
 
@@ -89,7 +90,8 @@ static _NORET void usage() {
           "  -v, --verbose\n"
           "  -s, --syscalls\n"
           "  -b, --breakpoint /path/to/dso+RVA\n"
-          "  -p, --attach PID\n";
+          "  -p, --attach PID\n"
+          "  -k, --call-stack\n";
   exit(0);
 }
 
@@ -147,13 +149,14 @@ int main(int argc, char **argv) {
     {"verbose",    no_argument,       NULL, 'v'},
     {"attach",     required_argument, NULL, 'p'},
     {"breakpoint", required_argument, NULL, 'b'},
+    {"call-stack", no_argument,       NULL, 'k'},
     {"help",       no_argument,       NULL, 'h'},
     {"version",    no_argument,       NULL, 'V'},
     {NULL, 0, NULL, 0}
   };
 
   int optc;
-  while ((optc = getopt_long(_argc, _argv, "shvVb:p:", longopts, NULL)) != -1) {
+  while ((optc = getopt_long(_argc, _argv, "skhvVb:p:", longopts, NULL)) != -1) {
     switch (optc) {
     case 's':
       opts::Syscalls = true;
@@ -168,6 +171,10 @@ int main(int argc, char **argv) {
     case 'b':
       assert(optarg);
       opts::Breakpoints.push_back(optarg);
+      break;
+
+    case 'k':
+      opts::CallStack = true;
       break;
 
     case 'v':
@@ -359,13 +366,22 @@ struct child_syscall_state_t {
 
 static std::unordered_map<pid_t, child_syscall_state_t> children_syscall_state;
 
-static void
-PlantBreakpoint(unsigned Idx, pid_t,
-                const std::unordered_map<std::string, uintptr_t> &vmm);
-static bool executable_virtual_memory_mappings_for_process(
-    pid_t child, std::unordered_map<std::string, uintptr_t> &out);
+struct mapping_t {
+  uintptr_t min;
+  uintptr_t max;
+  uintptr_t off;
+};
+
+typedef std::unordered_map<std::string, mapping_t> vmm_t;
+
+static bool executable_virtual_memory_mappings_for_process(pid_t child,
+                                                           vmm_t &out);
+
+static void PlantBreakpoint(unsigned Idx, pid_t, const vmm_t &);
 
 static void on_breakpoint(unsigned Idx, pid_t, const cpu_state_t &);
+
+static std::string description_of_pc(pid_t, uintptr_t, const vmm_t &);
 
 static long pc_of_cpu_state(const cpu_state_t &cpu_state) {
   long pc =
@@ -448,7 +464,7 @@ int TracerLoop(pid_t child) {
           //
           // parse /proc/<child>/maps
           //
-          std::unordered_map<std::string, uintptr_t> vmm;
+          vmm_t vmm;
           if (executable_virtual_memory_mappings_for_process(child, vmm)) {
             for (unsigned Idx = 0; Idx < BreakpointsPlanted.size(); ++Idx) {
               if (BreakpointsPlanted.test(Idx))
@@ -495,6 +511,13 @@ int TracerLoop(pid_t child) {
           _ptrace_get_cpu_state(child, cpu_state);
 
           long pc = pc_of_cpu_state(cpu_state);
+          long ra =
+#if defined(__mips64) || defined(__mips__)
+              cpu_state.regs[31]
+#else
+              0
+#endif
+              ;
 
           //
           // determine whether this syscall is entering or has exited
@@ -749,10 +772,22 @@ int TracerLoop(pid_t child) {
             };
 
             if (opts::Syscalls) {
+              std::ostream &out = std::cout;
+
               if (no >= 0 && no < syscalls::NR_MAX && syscall_names[no])
-                print_syscall(std::cout);
+                print_syscall(out);
               else
-                print_unknown_syscall(std::cout);
+                print_unknown_syscall(out);
+
+              if (opts::CallStack) {
+                if (ra) {
+                  vmm_t vmm;
+                  executable_virtual_memory_mappings_for_process(child, vmm);
+
+                          out << "  " << description_of_pc(child, pc, vmm) << '\n';
+                  if (ra) out << "  " << description_of_pc(child, ra, vmm) << '\n';
+                }
+              }
             }
           }
 
@@ -1003,8 +1038,7 @@ void dump_cpu_state(std::ostream &out, const cpu_state_t &X) {
   out << '\n';
 }
 
-bool executable_virtual_memory_mappings_for_process(
-    pid_t child, std::unordered_map<std::string, uintptr_t> &out) {
+bool executable_virtual_memory_mappings_for_process(pid_t child, vmm_t &out) {
   FILE *fp = nullptr;
   char *line = nullptr;
 
@@ -1025,13 +1059,13 @@ bool executable_virtual_memory_mappings_for_process(
 
   while ((read = getline(&line, &len, fp)) != -1) {
     int fields, dev_maj, dev_min, inode;
-    uint64_t min, max, offset;
+    uint64_t min, max, off;
     char flag_r, flag_w, flag_x, flag_p;
     char path[512] = "";
     fields = sscanf(line,
                     "%" PRIx64 "-%" PRIx64 " %c%c%c%c %" PRIx64 " %x:%x %d"
                     " %512s",
-                    &min, &max, &flag_r, &flag_w, &flag_x, &flag_p, &offset,
+                    &min, &max, &flag_r, &flag_w, &flag_x, &flag_p, &off,
                     &dev_maj, &dev_min, &inode, path);
 
     if ((fields < 10) || (fields > 11)) {
@@ -1048,7 +1082,10 @@ bool executable_virtual_memory_mappings_for_process(
         fs::path canon_path(fs::canonical(path));
         auto s = canon_path.string();
         if (out.find(s) == out.end()) {
-          out.emplace(s, min + offset);
+          mapping_t &m = out[s];
+          m.min = min;
+          m.max = max;
+          m.off = off;
         } else {
           if (opts::Verbose) {
             cerr << "multiple executable mappings for " << path << " ("
@@ -1067,7 +1104,7 @@ bool executable_virtual_memory_mappings_for_process(
 
 void PlantBreakpoint(unsigned Idx,
                      pid_t child,
-                     const std::unordered_map<std::string, uintptr_t> &vmm) {
+                     const vmm_t &vmm) {
   std::string dso;
   uintptr_t   rva;
   std::tie(dso, rva) = Breakpoints.at(Idx);
@@ -1082,7 +1119,9 @@ void PlantBreakpoint(unsigned Idx,
         dso + std::string("\""));
   }
 
-  uintptr_t va = rva + (*it).second;
+  const mapping_t &m = (*it).second;
+
+  uintptr_t va = rva + m.min - m.off;
 
   {
     long insnword1 = _ptrace_peekdata(child, va);
@@ -1260,6 +1299,25 @@ ssize_t _ptrace_memcpy(pid_t child, void *dest, const void *src, size_t n) {
   }
 
   return n;
+}
+
+std::string description_of_pc(pid_t child, uintptr_t pc, const vmm_t &vmm) {
+  for (const auto &vm : vmm) {
+    const mapping_t &m = vm.second;
+
+    if (pc > m.min && pc < m.max) {
+      uintptr_t rva = pc - m.min + m.off;
+
+      fs::path fn = fs::path(vm.first).filename();
+      char buff[128];
+      snprintf(buff, sizeof(buff), "%s+0x%" PRIxPTR, fn.c_str(), rva);
+      return buff;
+    }
+  }
+
+  char buff[64];
+  snprintf(buff, sizeof(buff), "0x%08" PRIxPTR, pc);
+  return buff;
 }
 
 void arch_put_breakpoint(void *code) {
