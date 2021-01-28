@@ -663,6 +663,7 @@ int TracerLoop(pid_t child) {
                   out << std::dec << a1 << ", " << "0x" << std::hex << a2;
                   break;
                 case syscalls::NR::newstat:
+                case syscalls::NR::statfs:
                 case syscalls::NR::stat64:
                   out << '\"' << _ptrace_read_string(child, a1) << "\", 0x" << std::hex << a2;
                   break;
