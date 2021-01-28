@@ -662,6 +662,12 @@ int TracerLoop(pid_t child) {
                 case syscalls::NR::newfstat:
                   out << std::dec << a1 << ", " << "0x" << std::hex << a2;
                   break;
+                case syscalls::NR::fstatat64:
+                  out << std::dec << a1 << ", "
+                      << '\"' << _ptrace_read_string(child, a2) << '\"' << ", "
+                      << "0x" << std::hex << a3 << ", " << std::dec << a4;
+                  break;
+
                 case syscalls::NR::newstat:
                 case syscalls::NR::statfs:
                 case syscalls::NR::stat64:
