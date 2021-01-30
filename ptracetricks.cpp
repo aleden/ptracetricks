@@ -710,6 +710,15 @@ int TracerLoop(pid_t child) {
                   break;
 
 #if defined(__mips64) || defined(__mips__)
+                case syscalls::NR::syscall:
+                  out << std::dec << a1 << ", "
+                      << std::dec << a2 << ", "
+                      << std::dec << a3 << ", "
+                      << std::dec << a4 << ", "
+                      << std::dec << a5 << ", "
+                      << std::dec << a6;
+                  break;
+
                 case syscalls::NR::mips_mmap:
 #endif
                 case syscalls::NR::mmap2:
