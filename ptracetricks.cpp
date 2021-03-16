@@ -647,6 +647,7 @@ int TracerLoop(pid_t child) {
                 case syscalls::NR::openat:
                   out << dec << a1 << ", \"" << _ptrace_read_string(child, a2) << '\"';
                   break;
+                case syscalls::NR::mkdir:
                 case syscalls::NR::access:
                   out << '\"' << _ptrace_read_string(child, a1) << "\", " << std::dec << a2;
                   break;
