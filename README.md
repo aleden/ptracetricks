@@ -1,5 +1,3 @@
-stupid ptrace tricks
-
 ```
 Usage:
 ptracetricks [OPTIONS] PROG -- [ARG_1] [ARG_2] ... [ARG_n]
