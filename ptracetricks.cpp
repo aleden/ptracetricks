@@ -30,8 +30,6 @@
 
 namespace fs = std::filesystem;
 
-//using llvm::WithColor;
-
 using namespace std;
 
 namespace opts {
@@ -58,10 +56,8 @@ static std::vector<long> BreakpointsInsnWord;
 static std::vector<long> BreakpointsInsnWordAfter;
 #endif
 
-static int ChildProc(void);
+static int ChildProc(int pipefd);
 static int TracerLoop(pid_t child);
-
-static bool SeenExec = false;
 
 static void IgnoreCtrlC(void) {
   struct sigaction sa;
@@ -102,6 +98,27 @@ static _NORET void version(void) {
 
   cout << "version " PTRACETRICKS_VERSION << endl;
   exit(0);
+}
+
+static void set_ptrace_options(pid_t child) {
+  //
+  // select ptrace options
+  //
+  int ptrace_options = PTRACE_O_TRACESYSGOOD |
+                    /* PTRACE_O_EXITKILL   | */
+                       PTRACE_O_TRACEEXIT  |
+                       PTRACE_O_TRACEEXEC  |
+                       PTRACE_O_TRACEFORK  |
+                    /* PTRACE_O_TRACEVFORK | */
+                       PTRACE_O_TRACECLONE;
+
+  //
+  // set those options
+  //
+  if (ptrace(PTRACE_SETOPTIONS, child, 0UL, ptrace_options) < 0) {
+    int err = errno;
+    cerr << __func__ << ": PTRACE_SETOPTIONS failed (" << strerror(err) << ")\n";
+  }
 }
 
 } // namespace ptracetricks
@@ -277,20 +294,53 @@ int main(int argc, char **argv) {
     }
     cerr << "waited on SIGSTOP.\n";
 
-    ptracetricks::SeenExec = true; /* XXX */
+    ptracetricks::set_ptrace_options(child);
+
     return ptracetricks::TracerLoop(child);
   } else {
     //
-    // mode 2: exec
+    // mode 2: create new process
     //
     if (!fs::exists(opts::Prog.c_str())) {
       cerr << "given program does not exist";
       return 1;
     }
 
+    //
+    // first, create a pipe
+    //
+    int pipefd[2];
+    if (pipe(pipefd) < 0) {
+      int err = errno;
+      cerr << "pipe(2) failed (" << strerror(err) << "). bug?\n";
+      return 1;
+    }
+
+    int rfd = pipefd[0];
+    int wfd = pipefd[1];
+
     child = fork();
-    if (!child)
-      return ptracetricks::ChildProc();
+    if (!child) {
+      {
+        int rc = close(rfd);
+        assert(!(rc < 0));
+      }
+
+      //
+      // make pipe close-on-exec
+      //
+      {
+        int rc = fcntl(wfd, F_SETFD, FD_CLOEXEC);
+        assert(!(rc < 0));
+      }
+
+      return ptracetricks::ChildProc(wfd);
+    }
+
+    {
+      int rc = close(wfd);
+      assert(!(rc < 0));
+    }
 
     //
     // observe the (initial) signal-delivery-stop
@@ -306,9 +356,38 @@ int main(int argc, char **argv) {
 
     cerr << "parent: initial stop observed\n";
 
-    ptracetricks::IgnoreCtrlC(); /* XXX */
+    ptracetricks::set_ptrace_options(child);
 
-    return ptracetricks::TracerLoop(child);
+    //
+    // allow the child to make progress (most importantly, execve)
+    //
+    if (ptrace(PTRACE_CONT, child, 0UL, 0UL) < 0) {
+      int err = errno;
+      cerr << "failed to resume tracee! (" << strerror(err) << ")\n";
+      return 1;
+    }
+
+    //
+    // "If a process attempts to read from an empty pipe, then read(2) will
+    // block until data is available."
+    //
+    {
+      ssize_t ret;
+      do {
+        uint8_t byte;
+        ret = read(rfd, &byte, 1);
+      } while (!(ret <= 0));
+
+      /* if we got here, the other end of the pipe must have been closed. */
+      {
+        int rc = close(rfd);
+        assert(!(rc < 0));
+      }
+    }
+
+    ptracetricks::IgnoreCtrlC();
+
+    return ptracetricks::TracerLoop(-1);
   }
 }
 
@@ -407,36 +486,16 @@ int TracerLoop(pid_t child) {
   boost::dynamic_bitset<> BreakpointsPlanted;
   BreakpointsPlanted.resize(Breakpoints.size());
 
-  //
-  // select ptrace options
-  //
-  int ptrace_options = PTRACE_O_TRACESYSGOOD
-                     | PTRACE_O_TRACECLONE
-                     | PTRACE_O_TRACEEXEC
-                     | PTRACE_O_TRACEFORK
-                     | PTRACE_O_TRACEVFORK;
-
-  /* PTRACE_O_EXITKILL */
-
-  //
-  // set those options
-  //
-  if (ptrace(PTRACE_SETOPTIONS, child, 0, ptrace_options) < 0) {
-    cerr << "PTRACE_SETOPTIONS failed (" << strerror(errno) << ')' << endl;
-    return 1;
-  }
-
   siginfo_t si;
   long sig = 0;
 
   try {
     for (;;) {
       if (likely(!(child < 0))) {
-        if (unlikely(
-                ptrace(SeenExec && (opts::Syscalls || !BreakpointsPlanted.all())
-                           ? PTRACE_SYSCALL
-                           : PTRACE_CONT,
-                       child, nullptr, reinterpret_cast<void *>(sig)) < 0))
+        if (unlikely(ptrace(opts::Syscalls || !BreakpointsPlanted.all()
+                                ? PTRACE_SYSCALL
+                                : PTRACE_CONT,
+                            child, nullptr, reinterpret_cast<void *>(sig)) < 0))
           cerr << "failed to resume tracee : " << strerror(errno) << '\n';
       }
 
@@ -460,7 +519,7 @@ int TracerLoop(pid_t child) {
         //
         // if we need to plant breakpoints, this is an opprtunity to do so
         //
-        if (SeenExec && !BreakpointsPlanted.all()) {
+        if (!BreakpointsPlanted.all()) {
           //
           // parse /proc/<child>/maps
           //
@@ -856,8 +915,6 @@ int TracerLoop(pid_t child) {
               break;
             case PTRACE_EVENT_EXEC:
               cerr << "ptrace event (PTRACE_EVENT_EXEC) [" << std::dec  << child << "]\n";
-
-              SeenExec = true;
               break;
             case PTRACE_EVENT_EXIT:
               cerr << "ptrace event (PTRACE_EVENT_EXIT) ["  << std::dec << child << "]\n";
@@ -1247,7 +1304,7 @@ void _ptrace_pokedata(pid_t child, uintptr_t addr, unsigned long data) {
                              std::string(strerror(errno)));
 }
 
-int ChildProc(void) {
+int ChildProc(int pipefd) {
   //
   // the request
   //
@@ -1289,6 +1346,8 @@ int ChildProc(void) {
   /* if we got here, execve failed */
   int err = errno;
   cerr << "failed to execve (reason: " << strerror(err) << '\n';
+
+  close(pipefd);
   return 1;
 }
 
