@@ -294,7 +294,20 @@ int main(int argc, char **argv) {
     }
     cerr << "waited on SIGSTOP.\n";
 
-    ptracetricks::set_ptrace_options(child);
+    {
+      int ptrace_options = PTRACE_O_TRACESYSGOOD |
+                        /* PTRACE_O_EXITKILL   | */
+                           PTRACE_O_TRACEEXIT  |
+                        /* PTRACE_O_TRACEEXEC  | */
+                           PTRACE_O_TRACEFORK  |
+                           PTRACE_O_TRACEVFORK |
+                           PTRACE_O_TRACECLONE;
+
+      if (ptrace(PTRACE_SETOPTIONS, child, 0UL, ptrace_options) < 0) {
+        int err = errno;
+        cerr << "PTRACE_SETOPTIONS failed: " << strerror(err) << endl;
+      }
+    }
 
     return ptracetricks::TracerLoop(child);
   } else {
@@ -356,7 +369,23 @@ int main(int argc, char **argv) {
 
     cerr << "parent: initial stop observed\n";
 
-    ptracetricks::set_ptrace_options(child);
+    {
+      //
+      // trace exec for the following
+      //
+      int ptrace_options = PTRACE_O_TRACESYSGOOD |
+                        /* PTRACE_O_EXITKILL   | */
+                           PTRACE_O_TRACEEXIT  |
+                           PTRACE_O_TRACEEXEC  |
+                           PTRACE_O_TRACEFORK  |
+                           PTRACE_O_TRACEVFORK |
+                           PTRACE_O_TRACECLONE;
+
+      if (ptrace(PTRACE_SETOPTIONS, child, 0UL, ptrace_options) < 0) {
+        int err = errno;
+        cerr << "PTRACE_SETOPTIONS failed: " << strerror(err) << endl;
+      }
+    }
 
     //
     // allow the child to make progress (most importantly, execve)
@@ -489,6 +518,8 @@ int TracerLoop(pid_t child) {
   siginfo_t si;
   long sig = 0;
 
+  bool FirstTime = true;
+
   try {
     for (;;) {
       if (likely(!(child < 0))) {
@@ -516,6 +547,26 @@ int TracerLoop(pid_t child) {
       }
 
       if (likely(WIFSTOPPED(status))) {
+        if (unlikely(FirstTime)) { /* is this the first ptrace-stop? */
+          FirstTime = false;
+
+          //
+          // we do not want to trace exec by default
+          //
+          int ptrace_options = PTRACE_O_TRACESYSGOOD |
+                            /* PTRACE_O_EXITKILL   | */
+                               PTRACE_O_TRACEEXIT  |
+                            /* PTRACE_O_TRACEEXEC  | */
+                               PTRACE_O_TRACEFORK  |
+                               PTRACE_O_TRACEVFORK |
+                               PTRACE_O_TRACECLONE;
+
+          if (ptrace(PTRACE_SETOPTIONS, child, 0UL, ptrace_options) < 0) {
+            int err = errno;
+            cerr << "PTRACE_SETOPTIONS failed: " << strerror(err) << endl;
+          }
+        }
+
         //
         // if we need to plant breakpoints, this is an opprtunity to do so
         //
@@ -703,6 +754,12 @@ int TracerLoop(pid_t child) {
               //
               try {
                 switch (no) {
+                case syscalls::NR::execve:
+                  out << '\"' << _ptrace_read_string(child, a1) << "\", 0x" << std::hex << a2 << ", 0x" << std::hex << a3;
+                  break;
+                case syscalls::NR::execveat:
+                  out << std::dec << a1 << ", \"" << _ptrace_read_string(child, a2) << "\", 0x" << std::hex << a3 << ", 0x" << std::hex << a4 << ", " << std::dec << a5;
+                  break;
                 case syscalls::NR::openat:
                   out << dec << a1 << ", \"" << _ptrace_read_string(child, a2) << '\"';
                   break;
@@ -955,8 +1012,9 @@ int TracerLoop(pid_t child) {
               _ptrace_pokedata(child, pc - 4, brk_insn);
 #endif
             } else {
-              std::cerr << "warning: no breakpoint @ " << std::hex << pc
-                        << std::endl;
+              if (opts::Verbose)
+                std::cerr << "warning: no breakpoint @ " << std::hex << pc
+                          << std::endl;
             }
           }
         } else if (ptrace(PTRACE_GETSIGINFO, child, 0, &si) < 0) {
